@@ -4,6 +4,7 @@ set -eu
 
 HOOK_NAME="zellij-ssh-login.zsh"
 PREVIEW_NAME="zellij-login-preview.sh"
+ACTION_NAME="zellij-login-action.sh"
 DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
 MARK_OPEN="# zellij-login:hook {{{"
 MARK_CLOSE="# zellij-login:hook }}}"
@@ -40,6 +41,10 @@ fi
 if [ -f "$prefix/$PREVIEW_NAME" ]; then
   rm -f -- "$prefix/$PREVIEW_NAME"
   info "removed $prefix/$PREVIEW_NAME"
+fi
+if [ -f "$prefix/$ACTION_NAME" ]; then
+  rm -f -- "$prefix/$ACTION_NAME"
+  info "removed $prefix/$ACTION_NAME"
 fi
 rmdir "$prefix" 2>/dev/null || true
 

@@ -95,16 +95,32 @@ _zellij_login_hook() {
   # query lands you in a normal shell with no zellij involvement.
   # Preview pane (right side) renders session metadata — cwd, status,
   # created-ago, last-attached — via the installer-shipped helper script.
-  # If the helper isn't present (e.g. user installed with --prefix= somewhere
-  # exotic), --preview silently no-ops and the picker just loses the pane.
-  local _zl_preview_cmd=""
-  local _zl_preview_script="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login/zellij-login-preview.sh"
-  [[ -x $_zl_preview_script ]] && _zl_preview_cmd="sh $_zl_preview_script {}"
+  # Destructive keys (ctrl-x / ctrl-k) are wired through the action helper
+  # so they can be rerun and trigger a reload without shelling out to zsh.
+  # Each helper is picked up at its default install prefix; if they're not
+  # present (user installed with a custom --prefix) the picker still works
+  # but the preview and key-bindings are silently absent.
+  local _zl_datadir="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
+  local _zl_preview_script="$_zl_datadir/zellij-login-preview.sh"
+  local _zl_action_script="$_zl_datadir/zellij-login-action.sh"
+  local _zl_preview_cmd="" _zl_header="enter = pick · esc = skip"
+  local -a _zl_binds
+  if [[ -x $_zl_preview_script ]]; then
+    _zl_preview_cmd="sh $_zl_preview_script {}"
+  fi
+  if [[ -x $_zl_action_script ]]; then
+    _zl_binds=(
+      "--bind=ctrl-x:execute-silent(sh $_zl_action_script kill {})+reload(sh $_zl_action_script list)"
+      "--bind=ctrl-k:execute-silent(sh $_zl_action_script clean-dead)+reload(sh $_zl_action_script list)"
+    )
+    _zl_header="enter=pick · esc=skip · ctrl-x=kill/delete · ctrl-k=clean dead"
+  fi
   choice=$(
     { print -- "$SKIP_SESSION"; print -- "$NEW_SESSION"; _zl_sorted_sessions; } \
-    | fzf --height=50% --reverse --prompt="zellij session > " --no-multi \
+    | fzf --height=60% --reverse --prompt="zellij session > " --no-multi \
         --preview="$_zl_preview_cmd" --preview-window='right,40%,wrap' \
-        --header-first --header="enter = pick highlighted · esc = skip"
+        --header-first --header="$_zl_header" \
+        "${_zl_binds[@]}"
   )
   [[ -z $choice || $choice == "$SKIP_SESSION" ]] && return 0
 

@@ -22,10 +22,15 @@ jobs:
           sh -n install.sh
           sh -n uninstall.sh
           sh -n zellij-login-preview.sh
+          sh -n zellij-login-action.sh
           sh -n test/roundtrip.sh
 
       - name: shellcheck
-        run: shellcheck --shell=sh install.sh uninstall.sh zellij-login-preview.sh test/roundtrip.sh
+        run: |
+          shellcheck --shell=sh \
+            install.sh uninstall.sh \
+            zellij-login-preview.sh zellij-login-action.sh \
+            test/roundtrip.sh
 
       - name: sandbox round-trip (skips zmx/fzf checks via warnings)
         run: sh test/roundtrip.sh

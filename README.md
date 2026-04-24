@@ -78,17 +78,24 @@ strips the marked block from `.zshrc` byte-for-byte and deletes the hook file. y
 ssh in:
 
 ```
-enter = pick highlighted · esc = skip
+enter=pick · esc=skip · ctrl-x=kill/delete · ctrl-k=clean dead
 zellij session >
-  [ skip · plain shell ]      ← highlighted by default
-  [+ new session ]
-  main
-  scratch
+   [ skip · plain shell ]      ← highlighted by default
+   [+ new session ]
+ ● main           │ session:  main
+ ● scratch        │ status:   active
+ ✗ old-notes      │ created:  3h 21m ago
+                  │ last:     12m ago
+                  │ cwd:      /Users/you/dev/app
 ```
 
-- **enter immediately (don't type anything)** → skip. plain shell, no zellij, no persistence. this is the default so you can bypass the picker with one keystroke.
+- **enter immediately (don't type anything)** → skip. plain shell, no zellij, no persistence. one-keystroke bypass.
 - type a session name (or arrow down) → enter → attach. cwd + scrollback preserved.
-- pick `[+ new session ]` → type a name → pick a directory → land inside, attached.
+- `●` = active session, `✗` = exited (attach to resurrect). sorted by most-recently-attached first.
+- right-side preview pane shows cwd (for sessions this hook created), status, created-ago, last-attached.
+- **ctrl-x** kills the highlighted session. if it's already exited (`✗`), it force-deletes (nukes resurrection state too). list reloads in place.
+- **ctrl-k** sweeps every `✗` EXITED session in one keystroke. the usual answer to "32 sessions, half are dead ghosts, why did I let this happen".
+- pick `[+ new session ]` → type a name → pick a directory (recently-used dirs listed first) → land inside, attached.
 - ctrl-n in the dir picker → prompts for a subdir name, `mkdir -p`s it, selects it.
 - esc anywhere → also skips, plain shell.
 

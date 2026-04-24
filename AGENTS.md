@@ -58,11 +58,13 @@ Conventional Commits with a short, descriptive scope — `feat(hook): …`, `fix
 
 | Path | What |
 | --- | --- |
-| `zellij-ssh-login.zsh` | The hook. ~90 lines. |
+| `zellij-ssh-login.zsh` | The hook. Session picker + new-session flow. |
+| `zellij-login-preview.sh` | POSIX-sh fzf preview renderer (session metadata). Installed alongside the hook. |
+| `zellij-login-action.sh` | POSIX-sh fzf `--bind` target for destructive keys (kill / clean-dead) and for `reload()` list generation. Installed alongside the hook. |
 | `layouts/zellij-login.kdl` | Single-pane + one-line `zellij:compact-bar` layout. Shipped into `$ZELLIJ_CONFIG_DIR/layouts/` by the installer. |
-| `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, layout placement, and zmx-login → zellij-login migration. |
-| `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk; removes the layout file. |
-| `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration/layout/--no-zellij-config test (seven cases). |
+| `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, layout + helper placement, and zmx-login → zellij-login migration. |
+| `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk; removes the helpers, layout, and `$XDG_CACHE_HOME/zellij-login/`. |
+| `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration/layout/--no-zellij-config test (seven cases). Also asserts helpers and cache dir lifecycle. |
 | `Makefile` | `install` / `uninstall` / `check` / `test`. |
 | `.github/workflows/check.yml` | CI runs `make check`-equivalent on every push. |
 | `README.md` | User-facing docs. Casual tone on purpose (dropped-session-friendly). |

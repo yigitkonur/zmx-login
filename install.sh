@@ -12,6 +12,7 @@ RAW_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 
 HOOK_NAME="zellij-ssh-login.zsh"
 PREVIEW_NAME="zellij-login-preview.sh"
+ACTION_NAME="zellij-login-action.sh"
 DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
 MARK_OPEN="# zellij-login:hook {{{"
 MARK_CLOSE="# zellij-login:hook }}}"
@@ -211,12 +212,14 @@ migrate_legacy
 # this script; otherwise fetch each from GitHub raw into a single temp dir.
 src=""
 src_preview=""
+src_action=""
 src_layout=""
 # shellcheck disable=SC1007  # intentional: unset CDPATH for this cd only
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)" || script_dir=""
 if [ -n "$script_dir" ] && [ -f "$script_dir/$HOOK_NAME" ]; then
   src="$script_dir/$HOOK_NAME"
   [ -f "$script_dir/$PREVIEW_NAME" ] && src_preview="$script_dir/$PREVIEW_NAME"
+  [ -f "$script_dir/$ACTION_NAME" ] && src_action="$script_dir/$ACTION_NAME"
   [ -f "$script_dir/$LAYOUT_REL_PATH" ] && src_layout="$script_dir/$LAYOUT_REL_PATH"
   info "installing from local clone ($script_dir)"
 else
@@ -232,6 +235,12 @@ else
     src_preview="$_tmpdir/$PREVIEW_NAME"
   else
     warn "preview download failed — session picker will lack the preview pane"
+  fi
+  info "downloading $ACTION_NAME from $RAW_URL"
+  if curl -fsSL "$RAW_URL/$ACTION_NAME" -o "$_tmpdir/$ACTION_NAME"; then
+    src_action="$_tmpdir/$ACTION_NAME"
+  else
+    warn "action helper download failed — kill/clean keys in the picker will be inert"
   fi
   if [ "$install_config" -eq 1 ]; then
     info "downloading $LAYOUT_NAME from $RAW_URL"
@@ -251,12 +260,16 @@ action="installed"
 cp -- "$src" "$prefix/$HOOK_NAME"
 info "$action hook at $prefix/$HOOK_NAME"
 
-# Ship the preview helper alongside the hook. Hook references it by the default
-# install prefix; a --prefix override leaves preview working only for the
-# standard path (acceptable — preview is cosmetic).
+# Ship the preview + action helpers alongside the hook. The hook references
+# them by the default install prefix; a --prefix override makes both work only
+# at the standard path (acceptable — they are cosmetic / convenience features).
 if [ -n "$src_preview" ]; then
   cp -- "$src_preview" "$prefix/$PREVIEW_NAME"
   chmod +x "$prefix/$PREVIEW_NAME"
+fi
+if [ -n "$src_action" ]; then
+  cp -- "$src_action" "$prefix/$ACTION_NAME"
+  chmod +x "$prefix/$ACTION_NAME"
 fi
 
 # Install the zellij-login layout (single pane + compact-bar, no tab bar)
