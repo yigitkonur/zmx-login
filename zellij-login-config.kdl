@@ -1,0 +1,64 @@
+// managed-by: zellij-login
+// your original config.kdl (if any) was moved to config.kdl.zellij-login.bak.
+// run the uninstaller to restore it, or delete this marker line to take ownership.
+//
+// see https://github.com/yigitkonur/zellij-login
+
+pane_frames false
+simplified_ui true
+show_startup_tips false
+show_release_notes false
+
+ui {
+    pane_frames {
+        rounded_corners false
+        hide_session_name true
+    }
+}
+
+mouse_mode true
+mouse_click_through true
+focus_follows_mouse true
+advanced_mouse_actions true
+
+keybinds clear-defaults=true {
+    shared {
+        bind "Alt t" { NewTab; }
+        bind "Alt w" { CloseTab; }
+        bind "Alt 1" { GoToTab 1; }
+        bind "Alt 2" { GoToTab 2; }
+        bind "Alt 3" { GoToTab 3; }
+        bind "Alt 4" { GoToTab 4; }
+        bind "Alt 5" { GoToTab 5; }
+        bind "Alt 6" { GoToTab 6; }
+        bind "Alt 7" { GoToTab 7; }
+        bind "Alt 8" { GoToTab 8; }
+        bind "Alt 9" { GoToTab 9; }
+        bind "Alt ]" { GoToNextTab; }
+        bind "Alt [" { GoToPreviousTab; }
+        bind "Ctrl Tab" { GoToNextTab; }
+        bind "Ctrl Shift Tab" { GoToPreviousTab; }
+        bind "Alt r" { SwitchToMode "RenameTab"; TabNameInput 0; }
+
+        bind "Alt n" { NewPane; }
+        bind "Alt q" { CloseFocus; }
+        bind "Alt h" { MoveFocus "Left"; }
+        bind "Alt j" { MoveFocus "Down"; }
+        bind "Alt k" { MoveFocus "Up"; }
+        bind "Alt l" { MoveFocus "Right"; }
+        bind "Alt z" { ToggleFocusFullscreen; }
+
+        bind "Alt d" { Detach; }
+
+        bind "Ctrl g" { SwitchToMode "Locked"; }
+    }
+
+    locked {
+        bind "Ctrl g" { SwitchToMode "Normal"; }
+    }
+
+    renametab {
+        bind "Enter" { SwitchToMode "Normal"; }
+        bind "Esc" { UndoRenameTab; SwitchToMode "Normal"; }
+    }
+}
