@@ -7,12 +7,21 @@ on:
 
 jobs:
   lint-and-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install zsh and shellcheck
+      - name: Install zsh and shellcheck (linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh shellcheck
+
+      - name: Install zsh and shellcheck (macos)
+        if: runner.os == 'macOS'
+        run: brew install zsh shellcheck
 
       - name: zsh syntax
         run: zsh -n zellij-ssh-login.zsh
@@ -32,5 +41,5 @@ jobs:
             zellij-login-preview.sh zellij-login-action.sh \
             test/roundtrip.sh
 
-      - name: sandbox round-trip (skips zmx/fzf checks via warnings)
+      - name: sandbox round-trip (skips zellij/fzf checks via warnings)
         run: sh test/roundtrip.sh
