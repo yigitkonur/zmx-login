@@ -27,6 +27,14 @@ _zmx_login_hook() {
   )
   [[ -z $choice || $choice == "$SKIP_SESSION" ]] && return 0
 
+  # Warp wraps the shell in a per-tab ZDOTDIR (warptmp.XXXXXX) whose .zshrc
+  # chain-sources the real ~/.zshrc. Inside a zmx PTY that chain can deadlock
+  # waiting on terminal-integration handshakes the multiplexer doesn't pass
+  # through, leaving Warp stuck on "Starting shell...". Dropping the override
+  # lets the zmx session source $HOME/.zshrc directly. No-op for non-Warp
+  # users and for anyone with a deliberate XDG-style ZDOTDIR.
+  [[ $ZDOTDIR == */warptmp.* ]] && unset ZDOTDIR
+
   if [[ $choice != "$NEW_SESSION" ]]; then
     zmx attach "$choice"
     return 0
