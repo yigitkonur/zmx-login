@@ -31,7 +31,7 @@ open a new ssh session. you're done.
 
 - zsh 5+ as login shell
 - `zellij` on PATH
-- `fzf` 0.48+ on PATH (for `--walker=dir`)
+- `fzf` 0.48+ on PATH
 
 the installer **bootstraps everything it needs if it's missing** — on mac it installs Homebrew (if absent) then `brew install`s `zellij` and `fzf`; on linux it `apt install`s (or `dnf` / `pacman`) zellij, fzf, and zsh. it prints exactly what it's doing and may prompt for your sudo password once for the Homebrew bootstrap. pass `--no-install-deps` if you'd rather handle all of that yourself — the hook still installs, and you get copy-pasteable warnings with the exact commands to run.
 
@@ -223,7 +223,7 @@ ssh host 'awk "/zellij-login:hook \{\{\{/,/zellij-login:hook \}\}\}/" ~/.zshrc'
 
 ## how it works
 
-one zsh file (`zellij-ssh-login.zsh`) sourced from `.zshrc`. runs once per login shell, guarded on a chain of `SSH_TTY` / interactive / IDE-remote / in-zellij / skip-flag checks — in that order, cheapest-and-most-likely-to-fail first. on pass: an fzf picker for the session (sessions stream in from `zellij list-sessions --short` while the picker is already rendering — no wait), then for new sessions an fzf `--walker=dir` picker for the directory with `ctrl-n` as "make subdir." then `zellij attach -c $name` in the chosen directory.
+one zsh file (`zellij-ssh-login.zsh`) sourced from `.zshrc`. runs once per login shell, guarded on a chain of `SSH_TTY` / interactive / IDE-remote / in-zellij / skip-flag checks — in that order, cheapest-and-most-likely-to-fail first. on pass: an fzf picker listing sessions parsed from `zellij list-sessions -n`, then for new sessions a `find`-backed fzf picker for the directory with `ctrl-n` as "make subdir." then `zellij [--layout zellij-login] attach -c -- $name` in the chosen directory — `--layout` is a zellij top-level flag and must precede the `attach` subcommand, and the `--` before `$name` keeps a dash-prefixed name from being parsed as flags.
 
 no `exec` — if zellij crashes or exits, the hook returns and you get a normal shell instead of getting logged out.
 
