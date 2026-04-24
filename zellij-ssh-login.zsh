@@ -177,7 +177,7 @@ _zellij_login_hook() {
 
   if [[ $choice != "$NEW_SESSION" ]]; then
     _zl_record_attach "$choice"
-    zellij attach -c "$choice"
+    zellij attach -c -- "$choice"
     return 0
   fi
 
@@ -230,7 +230,7 @@ _zellij_login_hook() {
   zj_args=(zellij)
   [[ -r ${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts/zellij-login.kdl ]] \
     && zj_args+=(--layout zellij-login)
-  zj_args+=(attach -c "$name")
+  zj_args+=(attach -c -- "$name")
   "${zj_args[@]}"
 }
 
