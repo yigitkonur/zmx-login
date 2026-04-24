@@ -73,18 +73,32 @@ _zellij_login_hook() {
     done | sort -rn -k1,1 | cut -f2-
   }
 
-  # Dir candidates for the new-session picker: MRU entries first (existing
-  # dirs only), then a bounded find over the configured roots with the same
-  # skip patterns the previous `fzf --walker` used. awk dedupes.
+  # Dir candidates for the new-session picker. Order matters — the first line
+  # is where fzf's cursor lands, and users reported the old order felt like
+  # "only the first root's subtree is there" because one root's 10k+ subdirs
+  # flooded the list before any other root's depth-0 entry appeared.
+  #
+  # Now:
+  #   1. $HOME first (so Enter-on-open lands you at ~, always).
+  #   2. MRU entries that still exist on disk.
+  #   3. Each configured root at depth 0 side-by-side, so the top of the list
+  #      shows roots together instead of one root's subtree drowning the rest.
+  #   4. Deeper subdirs of each root, bounded at maxdepth 5, with the same
+  #      skip patterns the previous `fzf --walker` used.
+  # awk '!seen[$0]++' downstream dedupes across all four sections.
   _zl_dir_candidates() {
     local r d
+    print -- "$HOME"
     if [[ -f "$CACHE_DIR/recent_dirs" ]]; then
       while IFS= read -r d; do
         [[ -d $d ]] && print -- "$d"
       done < "$CACHE_DIR/recent_dirs"
     fi
     for r in "${roots[@]}"; do
-      find "$r" -maxdepth 5 \
+      [[ -d $r ]] && print -- "$r"
+    done
+    for r in "${roots[@]}"; do
+      find "$r" -mindepth 1 -maxdepth 5 \
         \( -name .git -o -name node_modules -o -name .cache -o -name Library \
            -o -name .Trash -o -name .cargo -o -name .rustup -o -name .npm \) -prune \
         -o -type d -print 2>/dev/null
