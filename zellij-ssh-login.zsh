@@ -46,7 +46,11 @@ _zellij_login_hook() {
   # Push $1 to the top of the MRU dir list, deduped, capped at 50.
   _zl_record_recent_dir() {
     mkdir -p -- "$CACHE_DIR"
-    local file="$CACHE_DIR/recent_dirs" tmp="$CACHE_DIR/.recent_dirs.tmp"
+    # PID-suffix so concurrent SSH logins can't interleave writes into one
+    # shared scratch path. `mv` is atomic per-rename; last writer wins on the
+    # destination, but each writer's own tempfile is never corrupted by the
+    # other's bytes.
+    local file="$CACHE_DIR/recent_dirs" tmp="$CACHE_DIR/.recent_dirs.tmp.$$"
     { print -- "$1"; [[ -f $file ]] && awk -v d="$1" '$0 != d' "$file"; } \
       | awk 'NF' | head -50 > "$tmp" && mv -- "$tmp" "$file"
   }
