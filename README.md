@@ -26,16 +26,19 @@ open a new ssh session. you're done.
 ### requirements
 
 - zsh 5+ as login shell
-- `zmx` 0.5+ on PATH — `brew install neurosnap/tap/zmx` (mac) or grab a release from https://github.com/neurosnap/zmx (linux)
-- `fzf` 0.48+ on PATH — `brew install fzf` / `apt install fzf` / etc.
+- `zmx` 0.5+ on PATH
+- `fzf` 0.48+ on PATH
 
-missing any of the three? the hook prints one stderr line and lands you in a normal shell. no silent breakage.
+the installer **auto-installs `zmx` and `fzf` if they're missing** — via brew on mac, via `apt` / `dnf` / `pacman` on linux. it'll print exactly what it's doing. pass `--no-install-deps` if you'd rather handle the deps yourself. on mac without brew, or on unsupported distros, it falls back to printing the exact command to run.
+
+if they go missing at runtime later (you uninstalled fzf, zmx binary walked away), the hook prints one stderr line and lands you in a normal shell. no silent breakage.
 
 ### flags
 
 ```
-sh install.sh --no-wire         # place the file, don't touch .zshrc (source it yourself)
-sh install.sh --prefix=PATH     # install somewhere other than ~/.local/share/zmx-login
+sh install.sh --no-wire           # place the file, don't touch .zshrc (source it yourself)
+sh install.sh --no-install-deps   # don't try to auto-install zmx / fzf
+sh install.sh --prefix=PATH       # install somewhere other than ~/.local/share/zmx-login
 ```
 
 curl-piped with flags:

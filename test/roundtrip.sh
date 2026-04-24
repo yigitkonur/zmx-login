@@ -27,7 +27,7 @@ env_opts() {
 
 # --- 1. install ---
 env_opts
-sh "$ROOT/install.sh" >/dev/null
+sh "$ROOT/install.sh" --no-install-deps >/dev/null
 grep -Fq '# zmx-login:hook {{{' "$tmp_home/.zshrc" \
   || fail "marker not added to .zshrc"
 [ -f "$tmp_home/.local/share/zmx-login/zmx-ssh-login.zsh" ] \
@@ -35,14 +35,14 @@ grep -Fq '# zmx-login:hook {{{' "$tmp_home/.zshrc" \
 say "install: ok"
 
 # --- 2. idempotency ---
-sh "$ROOT/install.sh" >/dev/null
+sh "$ROOT/install.sh" --no-install-deps >/dev/null
 count="$(grep -Fc '# zmx-login:hook {{{' "$tmp_home/.zshrc")"
 [ "$count" = "1" ] || fail "marker duplicated ($count occurrences)"
 say "idempotent: ok"
 
 # --- 3. --no-wire ---
 alt_prefix="$tmp_home/alt"
-sh "$ROOT/install.sh" --no-wire --prefix="$alt_prefix" >/dev/null
+sh "$ROOT/install.sh" --no-wire --no-install-deps --prefix="$alt_prefix" >/dev/null
 [ -f "$alt_prefix/zmx-ssh-login.zsh" ] || fail "--no-wire did not place file"
 grep -Fq "$alt_prefix" "$tmp_home/.zshrc" && fail "--no-wire still wrote to .zshrc"
 say "--no-wire: ok"
