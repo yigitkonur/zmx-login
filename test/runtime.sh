@@ -33,13 +33,17 @@ fi
 EOF
 chmod +x "$tmp/bin/zellij"
 
+# fzf shim: capture stdin to FZF_STDIN_DIR/<idx> (so depth-cap tests can
+# inspect the candidate list the hook piped in), then emit pre-canned
+# output from FZF_OUTPUTS_DIR/<idx>.
 cat > "$tmp/bin/fzf" <<'EOF'
 #!/bin/sh
 set -eu
-cat > /dev/null
 idx=$(cat "${FZF_IDX_FILE:?}" 2>/dev/null || printf 0)
 idx=$((idx + 1))
 printf '%s' "$idx" > "$FZF_IDX_FILE"
+stdin_log="${FZF_STDIN_DIR:?}/$idx"
+cat > "$stdin_log"
 out="${FZF_OUTPUTS_DIR:?}/$idx"
 [ -f "$out" ] && cat "$out" || true
 EOF
@@ -68,11 +72,12 @@ unset ZELLIJ VSCODE_IPC_HOOK_CLI CURSOR_SESSION_ID TERM_PROGRAM \
 RUN_LOG="$tmp/run.log";                export RUN_LOG
 FZF_IDX_FILE="$tmp/fzf.idx";           export FZF_IDX_FILE
 FZF_OUTPUTS_DIR="$tmp/fzf.out";        export FZF_OUTPUTS_DIR
+FZF_STDIN_DIR="$tmp/fzf.stdin";        export FZF_STDIN_DIR
 
 reset() {
   rm -f "$RUN_LOG" "$FZF_IDX_FILE"
-  rm -rf "$FZF_OUTPUTS_DIR"
-  mkdir -p "$FZF_OUTPUTS_DIR"
+  rm -rf "$FZF_OUTPUTS_DIR" "$FZF_STDIN_DIR"
+  mkdir -p "$FZF_OUTPUTS_DIR" "$FZF_STDIN_DIR"
   : > "$RUN_LOG"
 }
 
@@ -84,11 +89,17 @@ run_hook() {
     >/dev/null 2>&1 || true
 }
 
+# NOTE on fzf output shape: the session picker runs with --print-query, so
+# fzf emits the current query on line 1 and the selection (if any) on
+# line 2. Canned outputs below follow that shape: empty first line when
+# the user didn't type a query; query-only (no second line) when the
+# query matched no candidate (scenario 7 "type-to-create").
+
 # --- 1. attach existing session (layout flag does NOT apply here) ---
 reset
 printf 'existing-session [Created 1h 23m ago]\n' > "$tmp/sessions"
 MOCK_SESSIONS="$tmp/sessions"; export MOCK_SESSIONS
-printf '%s\n' '● existing-session' > "$FZF_OUTPUTS_DIR/1"
+printf '\n%s\n' '● existing-session' > "$FZF_OUTPUTS_DIR/1"
 run_hook ''
 grep -Fxq 'zellij attach -c -- existing-session' "$RUN_LOG" \
   || fail "attach-existing: expected 'zellij attach -c -- existing-session'"
@@ -97,7 +108,7 @@ say "attach-existing: ok"
 # --- 2. new session with the zellij-login layout installed ---
 reset
 : > "$tmp/sessions"
-printf '%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
+printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook 'newsess
 '
@@ -109,7 +120,7 @@ say "new-with-layout: ok"
 reset
 rm -f "$ZELLIJ_CONFIG_DIR/layouts/zellij-login.kdl"
 : > "$tmp/sessions"
-printf '%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
+printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook 'nosess
 '
@@ -123,7 +134,7 @@ say "new-without-layout: ok"
 # --- 4. dash-prefixed session name: -- separator must survive intact ---
 reset
 : > "$tmp/sessions"
-printf '%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
+printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook '-xy
 '
@@ -146,5 +157,19 @@ run_hook ''
 unset ZELLIJ
 [ ! -s "$RUN_LOG" ] || fail "in-zellij: zellij should not be called"
 say "in-zellij: ok"
+
+# --- 7. type-to-create: query matches no session, becomes the new name ---
+# The session-picker fzf emits `typedname\n` (query only, no selection) to
+# simulate "user typed a name that matches nothing, pressed Enter". Hook
+# should skip the `read -r name` prompt and use the query as $name. The
+# dir picker (2nd fzf call) returns $HOME as before.
+reset
+: > "$tmp/sessions"
+printf '%s\n' 'typedname' > "$FZF_OUTPUTS_DIR/1"
+printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
+run_hook ''
+grep -Fxq 'zellij --layout zellij-login attach -c -- typedname' "$RUN_LOG" \
+  || fail "type-to-create: expected 'zellij --layout zellij-login attach -c -- typedname'"
+say "type-to-create: ok"
 
 say "all runtime tests passed"

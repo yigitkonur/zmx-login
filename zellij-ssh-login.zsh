@@ -146,26 +146,32 @@ _zellij_login_hook() {
       "--bind=ctrl-x:execute-silent(sh $_zl_action_q kill {})+reload(sh $_zl_action_q list)+pos(2)"
       "--bind=ctrl-k:execute-silent(sh $_zl_action_q clean-dead)+reload(sh $_zl_action_q list)+pos(2)"
     )
-    _zl_header="enter=pick · esc=skip · ctrl-x=kill/delete · ctrl-k=clean dead"
+    _zl_header="enter=pick/create · esc=skip · ctrl-x=kill/delete · ctrl-k=clean dead"
   fi
   # Order: skip first (so Enter-on-open is the safe default), sessions in
   # the middle (sorted by recency), new-session LAST — so after a kill
   # + reload the default cursor position never lands on "create new", which
   # would turn an accidental Enter into an unintended new-session flow.
-  choice=$(
+  # --print-query makes fzf emit the current query on line 1 and any selected
+  # item on line 2. That gives us "type-to-create": a query that matches no
+  # session produces the query alone, which we take as the new session name
+  # and dispatch straight to the dir picker — saving the user a redundant
+  # "new session name:" prompt for a name they already typed.
+  raw=$(
     { print -- "$SKIP_SESSION"; _zl_sorted_sessions; print -- "$NEW_SESSION"; } \
     | fzf --height=60% --reverse --prompt="zellij session > " --no-multi \
+        --print-query \
         --header-first --header="$_zl_header" \
         "${_zl_preview_args[@]}" "${_zl_binds[@]}"
   )
-  [[ -z $choice || $choice == "$SKIP_SESSION" ]] && return 0
+  local -a picker_out=("${(@f)raw}")
+  local query=${picker_out[1]:-} choice=${picker_out[2]:-}
 
-  # Strip the status icon prefix ("● " / "✗ ") we added in _zl_sorted_sessions.
-  # Sentinels don't have one, so this is a literal-prefix conditional strip.
-  case $choice in
-    "● "*) choice=${choice#"● "} ;;
-    "✗ "*) choice=${choice#"✗ "} ;;
-  esac
+  # Esc, or nothing-typed-and-nothing-picked.
+  [[ -z $query && -z $choice ]] && return 0
+
+  # Explicit skip sentinel.
+  [[ $choice == "$SKIP_SESSION" ]] && return 0
 
   # Warp wraps the shell in a per-tab ZDOTDIR (warptmp.XXXXXX) whose .zshrc
   # chain-sources the real ~/.zshrc. Inside a multiplexer PTY that chain can
@@ -175,15 +181,23 @@ _zellij_login_hook() {
   # non-Warp users and for anyone with a deliberate XDG-style ZDOTDIR.
   [[ $ZDOTDIR == */warptmp.* ]] && unset ZDOTDIR
 
-  if [[ $choice != "$NEW_SESSION" ]]; then
+  if [[ -z $choice && -n $query ]]; then
+    # Type-to-create: the query IS the new-session name. Skip the read prompt.
+    name=$query
+  elif [[ $choice == "$NEW_SESSION" ]]; then
+    print -n "new session name: "
+    read -r name || return 0
+    [[ -z $name ]] && return 0
+  else
+    # Existing session selected; strip the status icon we added earlier.
+    case $choice in
+      "● "*) choice=${choice#"● "} ;;
+      "✗ "*) choice=${choice#"✗ "} ;;
+    esac
     _zl_record_attach "$choice"
     zellij attach -c -- "$choice"
     return 0
   fi
-
-  print -n "new session name: "
-  read -r name || return 0
-  [[ -z $name ]] && return 0
 
   if [[ -n $ZELLIJ_LOGIN_ROOTS ]]; then
     roots=(${(s.:.)ZELLIJ_LOGIN_ROOTS})
