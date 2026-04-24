@@ -4,7 +4,7 @@ Instructions for AI agents (Claude Code, Codex, Cursor, etc.) working in this re
 
 ## What this is
 
-A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.zshrc`, prompts the user for a [zellij](https://zellij.dev/) session via `fzf`, and either attaches to an existing one or creates a new one after picking a directory with an `fzf --walker=dir` picker. POSIX-sh installer and uninstaller wire it into `.zshrc` via a marker-delimited block. The installer also ships a minimal zellij layout (`layouts/zellij-login.kdl`) — one plain pane + a one-line `zellij:compact-bar` status strip, no tab bar — so new sessions feel like "shell with persistence" instead of a multiplexer. The installer auto-migrates users upgrading from the previous (zmx-based) version of this project.
+A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.zshrc`, prompts the user for a [zellij](https://zellij.dev/) session via `fzf`, and either attaches to an existing one or creates a new one after picking a directory with a `find`-backed `fzf` picker. POSIX-sh installer and uninstaller wire it into `.zshrc` via a marker-delimited block. The installer also ships a minimal zellij layout (`layouts/zellij-login.kdl`) — one plain pane + a one-line `zellij:compact-bar` status strip, no tab bar — so new sessions feel like "shell with persistence" instead of a multiplexer. The installer auto-migrates users upgrading from the previous (zmx-based) version of this project.
 
 ## Non-goals
 
@@ -30,6 +30,7 @@ A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.
   - **Zellij argv contract** (asserted by `test/runtime.sh`): attach-existing runs `zellij attach -c -- <name>`; new-with-layout runs `zellij --layout zellij-login attach -c -- <name>`; new-without-layout (layout file absent) runs `zellij attach -c -- <name>` with no `--layout`. `--layout` is a zellij top-level flag and must come *before* `attach`; the `--` separator is required because user-typed names can start with `-`.
 - **No changes to** `~/.ssh/*`, `/etc/ssh/sshd_config`, SSH `ForceCommand`, or `~/.ssh/rc`. The hook's only integration point is `.zshrc`.
 - **Hot path discipline.** The hook runs on every interactive SSH login. Any work added before the short-circuit guards (interactive / `SSH_TTY` / `ZELLIJ` / IDE exclusions / skip flag) is a hot-path regression. Guards must be parameter expansions only — no subshells, no external commands — until we've confirmed the user wants the hook to fire.
+- **Undocumented fzf action in use.** The session picker binds `pos(N)` after `reload()` (hook lines ~145-147) so `ctrl-x` / `ctrl-k` cascade-kill keeps the cursor on the first real session. `pos(N)` works in fzf 0.48+ but is not listed in `fzf --help` or the man page. If you bump the fzf floor or replace the cascade-kill flow, re-verify the binding still produces the right cursor position — there's no documented equivalent (`first` lands on the skip sentinel, breaking the cascade).
 
 ## Before committing
 
