@@ -52,11 +52,34 @@ info() { printf 'zmx-login: %s\n' "$*"; }
 warn() { printf 'zmx-login: %s\n' "$*" >&2; }
 die()  { warn "$*"; exit 1; }
 
+# On mac, bootstrap Homebrew itself if it's missing — so the one-liner works
+# end-to-end on a clean machine instead of stopping at "install brew first."
+bootstrap_brew() {
+  info "brew not found — bootstrapping Homebrew (may take a few minutes)"
+  info "(you may be prompted for your sudo password by the Homebrew installer)"
+  if ! (set +e; NONINTERACTIVE=1 /bin/bash -c \
+    "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"); then
+    warn "Homebrew bootstrap failed — install manually: https://brew.sh"
+    return 1
+  fi
+  # The Homebrew installer prints the shellenv instructions but doesn't exec them
+  # in this shell, so deps below still wouldn't find brew. Activate it here.
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+  command -v brew >/dev/null 2>&1
+}
+
 # Platform-specific install command + human hint for each dep.
 # $cmd is empty when no automated path is available on this platform.
 os="$(uname -s 2>/dev/null || echo unknown)"
 case "$os" in
   Darwin)
+    if ! command -v brew >/dev/null 2>&1 && [ "$install_deps" -eq 1 ]; then
+      bootstrap_brew || true
+    fi
     if command -v brew >/dev/null 2>&1; then
       zsh_cmd="brew install zsh"
       zmx_cmd="brew install neurosnap/tap/zmx"

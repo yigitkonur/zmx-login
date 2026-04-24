@@ -29,7 +29,7 @@ open a new ssh session. you're done.
 - `zmx` 0.5+ on PATH
 - `fzf` 0.48+ on PATH
 
-the installer **auto-installs `zmx` and `fzf` if they're missing** — via brew on mac, via `apt` / `dnf` / `pacman` on linux. it'll print exactly what it's doing. pass `--no-install-deps` if you'd rather handle the deps yourself. on mac without brew, or on unsupported distros, it falls back to printing the exact command to run.
+the installer **bootstraps everything it needs if it's missing** — on mac it installs Homebrew (if absent) then `brew install`s `zmx` and `fzf`; on linux it `apt install`s (or `dnf` / `pacman`) fzf and zsh. it prints exactly what it's doing and may prompt for your sudo password once for the Homebrew bootstrap. pass `--no-install-deps` if you'd rather handle all of that yourself — the hook still installs, and you get copy-pasteable warnings with the exact commands to run.
 
 if they go missing at runtime later (you uninstalled fzf, zmx binary walked away), the hook prints one stderr line and lands you in a normal shell. no silent breakage.
 
