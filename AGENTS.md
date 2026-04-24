@@ -36,7 +36,9 @@ A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.
 make check
 ```
 
-Runs `zsh -n`, `sh -n`, `shellcheck --shell=sh`, and the sandbox round-trip + migration tests. CI runs the identical stack on every push. If local fails, don't push.
+Runs `zsh -n`, `sh -n`, `shellcheck --shell=sh`, and the sandbox round-trip + migration tests.
+
+No remote CI. Enforcement is client-side: run `make hooks` once in your clone and `make check` then runs automatically on every `git push` (via `.githooks/pre-push`). A failing check aborts the push. Bypass with `git push --no-verify` only if you know exactly what you're skipping.
 
 ## Testing locally
 
@@ -65,8 +67,8 @@ Conventional Commits with a short, descriptive scope — `feat(hook): …`, `fix
 | `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, layout + helper placement, and zmx-login → zellij-login migration. |
 | `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk; removes the helpers, layout, and `$XDG_CACHE_HOME/zellij-login/`. |
 | `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration/layout/--no-zellij-config test (seven cases). Also asserts helpers and cache dir lifecycle. |
-| `Makefile` | `install` / `uninstall` / `check` / `test`. |
-| `.github/workflows/check.yml` | CI runs `make check`-equivalent on every push. |
+| `Makefile` | `install` / `uninstall` / `check` / `test` / `hooks`. |
+| `.githooks/pre-push` | Runs `make check` before every `git push`. Enable via `make hooks`. |
 | `README.md` | User-facing docs. Casual tone on purpose (dropped-session-friendly). |
 | `AGENTS.md` | This file. |
 | `CLAUDE.md` | Points at `AGENTS.md`. |

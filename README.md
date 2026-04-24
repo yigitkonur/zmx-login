@@ -234,9 +234,10 @@ the installer and uninstaller are POSIX sh. they run under `dash`, pass `shellch
 ```sh
 make check      # zsh -n, sh -n, shellcheck, sandbox round-trip + migration test
 make test       # alias for check
+make hooks      # one-time: point git at .githooks/ so pre-push runs make check
 ```
 
-CI runs the same stack on every push — `.github/workflows/check.yml`. the sandbox test uses a throwaway `$HOME`, so it never touches your real dotfiles.
+no remote CI — the same stack runs client-side as a `pre-push` git hook after `make hooks`. a failing check aborts the push; `git push --no-verify` bypasses it. the sandbox test uses a throwaway `$HOME`, so it never touches your real dotfiles.
 
 see `AGENTS.md` if you're an AI agent working on this repo.
 

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-push hook: run the same lint + sandbox round-trip that used to live in
+# .github/workflows/check.yml. Abort the push if any step fails.
+# Bypass (when you really know what you're doing): git push --no-verify
+set -e
+printf '==> pre-push: make check\n'
+exec make check

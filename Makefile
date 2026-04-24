@@ -1,4 +1,4 @@
-.PHONY: install uninstall check test help
+.PHONY: install uninstall check test hooks help
 
 help:
 	@echo "targets:"
@@ -6,12 +6,17 @@ help:
 	@echo "  uninstall  remove the hook and unwire ~/.zshrc"
 	@echo "  check      lint the shell scripts and run the sandbox round-trip test"
 	@echo "  test       alias for check"
+	@echo "  hooks      point git at .githooks/ (enables pre-push make check)"
 
 install:
 	sh ./install.sh
 
 uninstall:
 	sh ./uninstall.sh
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "hooks: .git now runs .githooks/* — pre-push gates on make check"
 
 check test:
 	@zsh -n zellij-ssh-login.zsh     && echo "zsh -n: zellij-ssh-login.zsh     OK"

@@ -2,3 +2,7 @@
 *.swp
 *.swo
 *~
+
+# Tracked despite a global `.*/` ignore that some contributors may have.
+!.githooks/
+!.github/
