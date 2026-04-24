@@ -1,20 +1,27 @@
 #!/bin/sh
-# zmx-login installer — POSIX sh, macOS + Linux.
+# zellij-login installer — POSIX sh, macOS + Linux.
 # Works standalone (git clone) and curl-piped.
 #
 # Local:   sh install.sh
-# Remote:  curl -fsSL https://raw.githubusercontent.com/yigitkonur/zmx-login/main/install.sh | sh
+# Remote:  curl -fsSL https://raw.githubusercontent.com/yigitkonur/zellij-login/main/install.sh | sh
 set -eu
 
-REPO="yigitkonur/zmx-login"
+REPO="yigitkonur/zellij-login"
 BRANCH="main"
 RAW_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 
-HOOK_NAME="zmx-ssh-login.zsh"
-DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zmx-login"
-MARK_OPEN="# zmx-login:hook {{{"
-MARK_CLOSE="# zmx-login:hook }}}"
+HOOK_NAME="zellij-ssh-login.zsh"
+DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
+MARK_OPEN="# zellij-login:hook {{{"
+MARK_CLOSE="# zellij-login:hook }}}"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
+
+# Legacy-install constants so the new installer can migrate users who had
+# the previous zmx-backed version of this project installed.
+LEGACY_NAME="zmx-login"
+LEGACY_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/${LEGACY_NAME}"
+LEGACY_MARK_OPEN="# ${LEGACY_NAME}:hook {{{"
+LEGACY_MARK_CLOSE="# ${LEGACY_NAME}:hook }}}"
 
 wire=1
 install_deps=1
@@ -27,14 +34,18 @@ Usage: sh install.sh [--no-wire] [--no-install-deps] [--prefix=PATH]
    or: curl -fsSL ${RAW_URL}/install.sh | sh -s -- --no-wire
 
   --no-wire           install the hook file only; do not modify \$ZDOTDIR/.zshrc
-  --no-install-deps   do not attempt to auto-install missing zmx / fzf
+  --no-install-deps   do not attempt to auto-install missing zellij / fzf
   --prefix=PATH       install hook under PATH (default: $DEFAULT_PREFIX)
   -h, --help          show this help
 
 Environment (read by the hook at runtime):
-  ZMX_LOGIN_ROOTS   colon-separated directories for the dir picker
-                    (default: \$HOME/{research,dev,code,projects,Developer,src,work})
-  ZMX_LOGIN_SKIP    set to 1 to bypass the hook for a given session
+  ZELLIJ_LOGIN_ROOTS   colon-separated directories for the dir picker
+                       (default: \$HOME/{research,dev,code,projects,Developer,src,work})
+  ZELLIJ_LOGIN_SKIP    set to 1 to bypass the hook for a given session
+
+If a previous zmx-login install is detected (either the wired block in
+\$ZSHRC or the hook directory $LEGACY_PREFIX), this installer will remove
+it before wiring the new one.
 EOF
 }
 
@@ -44,12 +55,12 @@ for arg in "$@"; do
     --no-install-deps)  install_deps=0 ;;
     --prefix=*)         prefix="${arg#--prefix=}" ;;
     -h|--help)          usage; exit 0 ;;
-    *)                  printf 'zmx-login: unknown argument: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
+    *)                  printf 'zellij-login: unknown argument: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-info() { printf 'zmx-login: %s\n' "$*"; }
-warn() { printf 'zmx-login: %s\n' "$*" >&2; }
+info() { printf 'zellij-login: %s\n' "$*"; }
+warn() { printf 'zellij-login: %s\n' "$*" >&2; }
 die()  { warn "$*"; exit 1; }
 
 # On mac, bootstrap Homebrew itself if it's missing — so the one-liner works
@@ -82,37 +93,39 @@ case "$os" in
     fi
     if command -v brew >/dev/null 2>&1; then
       zsh_cmd="brew install zsh"
-      zmx_cmd="brew install neurosnap/tap/zmx"
+      zellij_cmd="brew install zellij"
       fzf_cmd="brew install fzf"
     else
-      zsh_cmd=""; zmx_cmd=""; fzf_cmd=""
+      zsh_cmd=""; zellij_cmd=""; fzf_cmd=""
     fi
     zsh_hint="brew install zsh  (install brew first: https://brew.sh)"
-    zmx_hint="brew install neurosnap/tap/zmx  (install brew first: https://brew.sh)"
+    zellij_hint="brew install zellij  (install brew first: https://brew.sh)"
     fzf_hint="brew install fzf  (install brew first: https://brew.sh)"
     ;;
   Linux)
     if command -v apt-get >/dev/null 2>&1; then
       zsh_cmd="sudo apt-get update -qq && sudo apt-get install -y zsh"
+      zellij_cmd="sudo apt-get update -qq && sudo apt-get install -y zellij"
       fzf_cmd="sudo apt-get update -qq && sudo apt-get install -y fzf"
     elif command -v dnf >/dev/null 2>&1; then
       zsh_cmd="sudo dnf install -y zsh"
+      zellij_cmd="sudo dnf install -y zellij"
       fzf_cmd="sudo dnf install -y fzf"
     elif command -v pacman >/dev/null 2>&1; then
       zsh_cmd="sudo pacman -S --noconfirm zsh"
+      zellij_cmd="sudo pacman -S --noconfirm zellij"
       fzf_cmd="sudo pacman -S --noconfirm fzf"
     else
-      zsh_cmd=""; fzf_cmd=""
+      zsh_cmd=""; zellij_cmd=""; fzf_cmd=""
     fi
-    zmx_cmd=""  # zmx has no linux package; release-binary download is out of scope
     zsh_hint="apt install zsh  (or your distro's package manager)"
-    zmx_hint="grab a release binary from https://github.com/neurosnap/zmx/releases and place it on \$PATH"
+    zellij_hint="apt install zellij  (or grab a release from https://github.com/zellij-org/zellij/releases)"
     fzf_hint="apt install fzf  (or your distro's package manager)"
     ;;
   *)
-    zsh_cmd=""; zmx_cmd=""; fzf_cmd=""
+    zsh_cmd=""; zellij_cmd=""; fzf_cmd=""
     zsh_hint="see https://www.zsh.org/"
-    zmx_hint="see https://github.com/neurosnap/zmx"
+    zellij_hint="see https://zellij.dev/"
     fzf_hint="see https://github.com/junegunn/fzf"
     ;;
 esac
@@ -148,9 +161,39 @@ ensure_dep() {
   return 1
 }
 
-ensure_dep zsh "$zsh_cmd" "$zsh_hint" 1 || true
-ensure_dep zmx "$zmx_cmd" "$zmx_hint" 0 || true
-ensure_dep fzf "$fzf_cmd" "$fzf_hint" 0 || true
+ensure_dep zsh    "$zsh_cmd"    "$zsh_hint"    1 || true
+ensure_dep zellij "$zellij_cmd" "$zellij_hint" 0 || true
+ensure_dep fzf    "$fzf_cmd"    "$fzf_hint"    0 || true
+
+# Legacy zmx-login migration.
+# Detect the old wired block and/or hook directory from the previous
+# (zmx-based) version of this project. Strip the old block from $ZSHRC
+# and remove the old install dir so the new install is the single source.
+migrate_legacy() {
+  did_anything=0
+  if [ -f "$ZSHRC" ] && grep -Fq "$LEGACY_MARK_OPEN" "$ZSHRC"; then
+    tmp="$(mktemp)"
+    # Same awk strip the (old) uninstaller used — inlined so migration
+    # doesn't depend on the legacy uninstaller being reachable.
+    awk -v o="$LEGACY_MARK_OPEN" -v c="$LEGACY_MARK_CLOSE" '
+      index($0, o) > 0 { inblock = 1; next }
+      index($0, c) > 0 { inblock = 0; next }
+      !inblock         { print }
+    ' "$ZSHRC" > "$tmp"
+    mv -- "$tmp" "$ZSHRC"
+    info "removed legacy ${LEGACY_NAME} block from $ZSHRC"
+    did_anything=1
+  fi
+  if [ -d "$LEGACY_PREFIX" ]; then
+    rm -rf -- "$LEGACY_PREFIX"
+    info "removed legacy ${LEGACY_NAME} directory at $LEGACY_PREFIX"
+    did_anything=1
+  fi
+  if [ "$did_anything" -eq 1 ]; then
+    info "migrated from ${LEGACY_NAME} — new zellij-login replaces it"
+  fi
+}
+migrate_legacy
 
 # Locate source hook: prefer local copy adjacent to this script, else fetch from GitHub.
 src=""
@@ -162,7 +205,7 @@ if [ -n "$script_dir" ] && [ -f "$script_dir/$HOOK_NAME" ]; then
   info "installing from local clone ($script_dir)"
 else
   command -v curl >/dev/null 2>&1 || die "neither $HOOK_NAME found locally nor curl available"
-  src="$(mktemp "${TMPDIR:-/tmp}/zmx-login.XXXXXX")"
+  src="$(mktemp "${TMPDIR:-/tmp}/zellij-login.XXXXXX")"
   cleanup="$src"
   trap 'rm -f -- "$cleanup"' EXIT
   info "downloading $HOOK_NAME from $RAW_URL"
@@ -183,6 +226,7 @@ if [ "$wire" -eq 0 ]; then
   exit 0
 fi
 
+[ -f "$ZSHRC" ] || : > "$ZSHRC"
 if grep -Fq "$MARK_OPEN" "$ZSHRC" 2>/dev/null; then
   info "$ZSHRC already sources the hook"
 else

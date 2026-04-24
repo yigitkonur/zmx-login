@@ -1,11 +1,11 @@
 #!/bin/sh
-# zmx-login uninstaller — POSIX sh.
+# zellij-login uninstaller — POSIX sh.
 set -eu
 
-HOOK_NAME="zmx-ssh-login.zsh"
-DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zmx-login"
-MARK_OPEN="# zmx-login:hook {{{"
-MARK_CLOSE="# zmx-login:hook }}}"
+HOOK_NAME="zellij-ssh-login.zsh"
+DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
+MARK_OPEN="# zellij-login:hook {{{"
+MARK_CLOSE="# zellij-login:hook }}}"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 
 prefix="$DEFAULT_PREFIX"
@@ -20,11 +20,11 @@ Usage: sh uninstall.sh [--prefix=PATH]
   --prefix=PATH   remove hook installed under PATH (default: $DEFAULT_PREFIX)
 EOF
       exit 0 ;;
-    *) printf 'zmx-login: unknown argument: %s\n' "$arg" >&2; exit 2 ;;
+    *) printf 'zellij-login: unknown argument: %s\n' "$arg" >&2; exit 2 ;;
   esac
 done
 
-info() { printf 'zmx-login: %s\n' "$*"; }
+info() { printf 'zellij-login: %s\n' "$*"; }
 
 if [ -f "$prefix/$HOOK_NAME" ]; then
   rm -f -- "$prefix/$HOOK_NAME"

@@ -1,17 +1,17 @@
-_zmx_login_hook() {
+_zellij_login_hook() {
   [[ -o interactive ]]                            || return 0
   [[ -n $SSH_TTY ]]                               || return 0
-  [[ -z $ZMX_SESSION ]]                           || return 0
-  [[ -z $ZMX_LOGIN_SKIP ]]                        || return 0
+  [[ -z $ZELLIJ ]]                                || return 0
+  [[ -z $ZELLIJ_LOGIN_SKIP ]]                     || return 0
   [[ -z $VSCODE_IPC_HOOK_CLI ]]                   || return 0
   [[ -z $CURSOR_SESSION_ID ]]                     || return 0
   [[ $TERM_PROGRAM != vscode ]]                   || return 0
   [[ $TERMINAL_EMULATOR != JetBrains-JediTerm ]]  || return 0
-  [[ -z $ZMX_LOGIN_HOOK_DONE ]]                   || return 0
-  export ZMX_LOGIN_HOOK_DONE=1
+  [[ -z $ZELLIJ_LOGIN_HOOK_DONE ]]                || return 0
+  export ZELLIJ_LOGIN_HOOK_DONE=1
 
-  command -v zmx >/dev/null 2>&1 || { print -u2 "zmx-login: zmx not on PATH"; return 0; }
-  command -v fzf >/dev/null 2>&1 || { print -u2 "zmx-login: fzf not on PATH"; return 0; }
+  command -v zellij >/dev/null 2>&1 || { print -u2 "zellij-login: zellij not on PATH"; return 0; }
+  command -v fzf    >/dev/null 2>&1 || { print -u2 "zellij-login: fzf not on PATH"; return 0; }
 
   local SKIP_SESSION="[ skip · plain shell ]"
   local NEW_SESSION="[+ new session ]"
@@ -19,24 +19,24 @@ _zmx_login_hook() {
   local -a roots walker_args fzf_out
 
   # Skip is the first (default-highlighted) item so that Enter on an empty
-  # query lands you in a normal shell with no zmx involvement.
+  # query lands you in a normal shell with no zellij involvement.
   choice=$(
-    { print -- "$SKIP_SESSION"; print -- "$NEW_SESSION"; zmx list --short 2>/dev/null; } \
-    | fzf --height=40% --reverse --prompt="zmx session > " --no-multi \
+    { print -- "$SKIP_SESSION"; print -- "$NEW_SESSION"; zellij list-sessions --short 2>/dev/null; } \
+    | fzf --height=40% --reverse --prompt="zellij session > " --no-multi \
         --header-first --header="enter = pick highlighted · esc = skip"
   )
   [[ -z $choice || $choice == "$SKIP_SESSION" ]] && return 0
 
   # Warp wraps the shell in a per-tab ZDOTDIR (warptmp.XXXXXX) whose .zshrc
-  # chain-sources the real ~/.zshrc. Inside a zmx PTY that chain can deadlock
-  # waiting on terminal-integration handshakes the multiplexer doesn't pass
-  # through, leaving Warp stuck on "Starting shell...". Dropping the override
-  # lets the zmx session source $HOME/.zshrc directly. No-op for non-Warp
-  # users and for anyone with a deliberate XDG-style ZDOTDIR.
+  # chain-sources the real ~/.zshrc. Inside a multiplexer PTY that chain can
+  # deadlock waiting on terminal-integration handshakes the multiplexer doesn't
+  # pass through, leaving Warp stuck on "Starting shell...". Dropping the
+  # override lets the zellij session source $HOME/.zshrc directly. No-op for
+  # non-Warp users and for anyone with a deliberate XDG-style ZDOTDIR.
   [[ $ZDOTDIR == */warptmp.* ]] && unset ZDOTDIR
 
   if [[ $choice != "$NEW_SESSION" ]]; then
-    zmx attach "$choice"
+    zellij attach -c "$choice"
     return 0
   fi
 
@@ -44,8 +44,8 @@ _zmx_login_hook() {
   read -r name || return 0
   [[ -z $name ]] && return 0
 
-  if [[ -n $ZMX_LOGIN_ROOTS ]]; then
-    roots=(${(s.:.)ZMX_LOGIN_ROOTS})
+  if [[ -n $ZELLIJ_LOGIN_ROOTS ]]; then
+    roots=(${(s.:.)ZELLIJ_LOGIN_ROOTS})
   else
     roots=()
     for r in "$HOME/research" "$HOME/dev" "$HOME/code" "$HOME/projects" "$HOME/Developer" "$HOME/src" "$HOME/work"; do
@@ -74,15 +74,15 @@ _zmx_login_hook() {
     print -n "new subdir under $picked: "
     read -r sub || return 0
     [[ -z $sub ]] && return 0
-    mkdir -p -- "$picked/$sub" || { print -u2 "zmx-login: mkdir failed"; return 0; }
+    mkdir -p -- "$picked/$sub" || { print -u2 "zellij-login: mkdir failed"; return 0; }
     target="$picked/$sub"
   else
     target=$picked
   fi
 
   cd -- "$target" || return 0
-  zmx attach "$name"
+  zellij attach -c "$name"
 }
 
-_zmx_login_hook
-unset -f _zmx_login_hook
+_zellij_login_hook
+unset -f _zellij_login_hook

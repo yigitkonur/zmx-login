@@ -14,10 +14,10 @@ uninstall:
 	sh ./uninstall.sh
 
 check test:
-	@zsh -n zmx-ssh-login.zsh   && echo "zsh -n: zmx-ssh-login.zsh OK"
-	@sh  -n install.sh          && echo "sh -n:  install.sh        OK"
-	@sh  -n uninstall.sh        && echo "sh -n:  uninstall.sh      OK"
-	@sh  -n test/roundtrip.sh   && echo "sh -n:  test/roundtrip.sh OK"
+	@zsh -n zellij-ssh-login.zsh && echo "zsh -n: zellij-ssh-login.zsh OK"
+	@sh  -n install.sh           && echo "sh -n:  install.sh           OK"
+	@sh  -n uninstall.sh         && echo "sh -n:  uninstall.sh         OK"
+	@sh  -n test/roundtrip.sh    && echo "sh -n:  test/roundtrip.sh    OK"
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck --shell=sh install.sh uninstall.sh test/roundtrip.sh \
 		  && echo "shellcheck: OK"; \

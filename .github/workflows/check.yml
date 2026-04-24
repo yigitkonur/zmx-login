@@ -15,7 +15,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh shellcheck
 
       - name: zsh syntax
-        run: zsh -n zmx-ssh-login.zsh
+        run: zsh -n zellij-ssh-login.zsh
 
       - name: sh syntax
         run: |
