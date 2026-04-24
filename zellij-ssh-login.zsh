@@ -121,6 +121,25 @@ _zellij_login_hook() {
     done
   }
 
+  # Remove cache entries whose session no longer exists in zellij's live list.
+  # Handles two drift sources: (1) a failed `zellij attach` that left an
+  # intent-recorded marker with no session behind it, (2) sessions the user
+  # killed outside this tool (direct `zellij kill-session` etc). Skip only
+  # when the snapshot file is missing — an empty snapshot legitimately means
+  # "zero sessions", in which case every cache entry IS stale.
+  # (N) makes empty globs a no-op; ${live[(I)x]} is zsh's reverse-subscript
+  # membership test (0 if $x not in $live).
+  _zl_gc_cache() {
+    [[ -f $_zl_list_cache ]] || return 0
+    local -a live
+    live=(${(@f)"$(awk '{print $1}' "$_zl_list_cache")"})
+    local f name
+    for f in "$CACHE_DIR/attached"/*(N) "$CACHE_DIR/cwds"/*(N); do
+      name=${f:t}
+      (( ${live[(I)$name]} )) || rm -f -- "$f"
+    done
+  }
+
   # Take one snapshot of the live session list now, write it via
   # temp-then-rename so concurrent SSH logins can't corrupt the destination.
   # Always overwrite (even on zellij failure) so a previous-run cache can
@@ -132,6 +151,9 @@ _zellij_login_hook() {
   zellij list-sessions -n 2>/dev/null > "$_zl_list_tmp"
   mv -- "$_zl_list_tmp" "$_zl_list_cache" 2>/dev/null \
     || rm -f -- "$_zl_list_tmp" 2>/dev/null
+
+  # Sweep phantom cache entries now that we have an authoritative live list.
+  _zl_gc_cache
 
   # Skip is the first (default-highlighted) item so that Enter on an empty
   # query lands you in a normal shell with no zellij involvement.
