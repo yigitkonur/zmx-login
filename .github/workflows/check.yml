@@ -1,0 +1,30 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh and shellcheck
+        run: sudo apt-get update && sudo apt-get install -y zsh shellcheck
+
+      - name: zsh syntax
+        run: zsh -n zmx-ssh-login.zsh
+
+      - name: sh syntax
+        run: |
+          sh -n install.sh
+          sh -n uninstall.sh
+          sh -n test/roundtrip.sh
+
+      - name: shellcheck
+        run: shellcheck --shell=sh install.sh uninstall.sh test/roundtrip.sh
+
+      - name: sandbox round-trip (skips zmx/fzf checks via warnings)
+        run: sh test/roundtrip.sh
