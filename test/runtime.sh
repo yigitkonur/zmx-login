@@ -172,4 +172,28 @@ grep -Fxq 'zellij --layout zellij-login attach -c -- typedname' "$RUN_LOG" \
   || fail "type-to-create: expected 'zellij --layout zellij-login attach -c -- typedname'"
 say "type-to-create: ok"
 
+# --- 8. dir-depth-cap: new-session dir picker stops at depth 1 ---
+# Seed a root with a depth-2+ tree and assert that only depth-0 + depth-1
+# dirs reach the fzf stdin. Prevents regression to the old maxdepth-5 list
+# that drowned top-level projects under fuzzy-ranked sub-sub-paths.
+reset
+: > "$tmp/sessions"
+mkdir -p -- "$HOME/proj-a/subdir-1/leaf" "$HOME/proj-b"
+ZELLIJ_LOGIN_ROOTS="$HOME"; export ZELLIJ_LOGIN_ROOTS
+printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
+printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
+run_hook 'depthsess
+'
+unset ZELLIJ_LOGIN_ROOTS
+grep -Fxq "$HOME/proj-a" "$FZF_STDIN_DIR/2" \
+  || fail "dir-depth-cap: expected top-level '$HOME/proj-a' in dir-picker stdin"
+grep -Fxq "$HOME/proj-b" "$FZF_STDIN_DIR/2" \
+  || fail "dir-depth-cap: expected top-level '$HOME/proj-b' in dir-picker stdin"
+! grep -Fxq "$HOME/proj-a/subdir-1" "$FZF_STDIN_DIR/2" \
+  || fail "dir-depth-cap: depth-2 '$HOME/proj-a/subdir-1' leaked past maxdepth cap"
+! grep -Fxq "$HOME/proj-a/subdir-1/leaf" "$FZF_STDIN_DIR/2" \
+  || fail "dir-depth-cap: depth-3 '$HOME/proj-a/subdir-1/leaf' leaked past maxdepth cap"
+rm -rf -- "$HOME/proj-a" "$HOME/proj-b"
+say "dir-depth-cap: ok"
+
 say "all runtime tests passed"

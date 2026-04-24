@@ -86,8 +86,12 @@ _zellij_login_hook() {
   #   2. MRU entries that still exist on disk.
   #   3. Each configured root at depth 0 side-by-side, so the top of the list
   #      shows roots together instead of one root's subtree drowning the rest.
-  #   4. Deeper subdirs of each root, bounded at maxdepth 5, with the same
-  #      skip patterns the previous `fzf --walker` used.
+  #   4. Each root's immediate children (depth 1). Deeper paths are reachable
+  #      via MRU (recent_dirs) if the user has picked them before, or via the
+  #      ctrl-n "make subdir under highlighted" escape hatch in the picker.
+  #      Cap chosen to keep the candidate list tractable: on a typical dev
+  #      machine depth 5 is ~30k candidates and fzf fuzzy-ranks sub-sub-paths
+  #      above actual project dirs for short queries.
   # awk '!seen[$0]++' downstream dedupes across all four sections.
   _zl_dir_candidates() {
     local r d
@@ -101,7 +105,7 @@ _zellij_login_hook() {
       [[ -d $r ]] && print -- "$r"
     done
     for r in "${roots[@]}"; do
-      find "$r" -mindepth 1 -maxdepth 5 \
+      find "$r" -mindepth 1 -maxdepth 1 \
         \( -name .git -o -name node_modules -o -name .cache -o -name Library \
            -o -name .Trash -o -name .cargo -o -name .rustup -o -name .npm \) -prune \
         -o -type d -print 2>/dev/null
