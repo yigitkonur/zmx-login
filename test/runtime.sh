@@ -46,6 +46,10 @@ stdin_log="${FZF_STDIN_DIR:?}/$idx"
 cat > "$stdin_log"
 out="${FZF_OUTPUTS_DIR:?}/$idx"
 [ -f "$out" ] && cat "$out" || true
+# Optional per-call exit code simulation. Scenarios that need to fake fzf's
+# Esc (130) or no-match-Enter (1) exit status write it to FZF_RC_DIR/<idx>.
+rc_file="${FZF_RC_DIR:-/nonexistent}/$idx"
+[ -f "$rc_file" ] && exit "$(cat "$rc_file")"
 EOF
 chmod +x "$tmp/bin/fzf"
 
@@ -73,11 +77,12 @@ RUN_LOG="$tmp/run.log";                export RUN_LOG
 FZF_IDX_FILE="$tmp/fzf.idx";           export FZF_IDX_FILE
 FZF_OUTPUTS_DIR="$tmp/fzf.out";        export FZF_OUTPUTS_DIR
 FZF_STDIN_DIR="$tmp/fzf.stdin";        export FZF_STDIN_DIR
+FZF_RC_DIR="$tmp/fzf.rc";              export FZF_RC_DIR
 
 reset() {
   rm -f "$RUN_LOG" "$FZF_IDX_FILE"
-  rm -rf "$FZF_OUTPUTS_DIR" "$FZF_STDIN_DIR"
-  mkdir -p "$FZF_OUTPUTS_DIR" "$FZF_STDIN_DIR"
+  rm -rf "$FZF_OUTPUTS_DIR" "$FZF_STDIN_DIR" "$FZF_RC_DIR"
+  mkdir -p "$FZF_OUTPUTS_DIR" "$FZF_STDIN_DIR" "$FZF_RC_DIR"
   : > "$RUN_LOG"
 }
 
@@ -195,5 +200,22 @@ grep -Fxq "$HOME/proj-b" "$FZF_STDIN_DIR/2" \
   || fail "dir-depth-cap: depth-3 '$HOME/proj-a/subdir-1/leaf' leaked past maxdepth cap"
 rm -rf -- "$HOME/proj-a" "$HOME/proj-b"
 say "dir-depth-cap: ok"
+
+# --- 9. esc-with-query: typed query + Esc must cancel, not create ---
+# With --print-query, fzf prints the query to stdout on Esc (exit 130) too.
+# Without the rc check, the hook treats this identically to "Enter with no
+# match" and spawns an unintended session named after the typed query.
+# Simulates the abort by writing '130' to FZF_RC_DIR/1. The dir picker
+# canned output (fzf call 2) IS provided so that a bug-regression would
+# propagate all the way to a zellij call; an rc-aware hook bails on call 1.
+reset
+: > "$tmp/sessions"
+printf '%s\n' 'abandoned-query' > "$FZF_OUTPUTS_DIR/1"
+printf '130' > "$FZF_RC_DIR/1"
+printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
+run_hook ''
+[ ! -s "$RUN_LOG" ] \
+  || fail "esc-with-query: zellij should not be called on Esc-with-query"
+say "esc-with-query: ok"
 
 say "all runtime tests passed"

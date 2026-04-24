@@ -128,7 +128,7 @@ _zellij_login_hook() {
   # in the path (most commonly a space in $HOME) has to be quoted for sh or
   # `sh /Users/John Doe/…` splits into `sh /Users/John` + bad argv.
   # ${(q)…} is zsh's built-in shell-quote; handles spaces, quotes, and $.
-  local _zl_header="enter = pick · esc = skip"
+  local _zl_header="enter = pick/create · esc = skip"
   local _zl_preview_q=${(q)_zl_preview_script}
   local _zl_action_q=${(q)_zl_action_script}
   local -a _zl_binds _zl_preview_args
@@ -161,6 +161,7 @@ _zellij_login_hook() {
   # session produces the query alone, which we take as the new session name
   # and dispatch straight to the dir picker — saving the user a redundant
   # "new session name:" prompt for a name they already typed.
+  local raw fzf_rc
   raw=$(
     { print -- "$SKIP_SESSION"; _zl_sorted_sessions; print -- "$NEW_SESSION"; } \
     | fzf --height=60% --reverse --prompt="zellij session > " --no-multi \
@@ -168,13 +169,17 @@ _zellij_login_hook() {
         --header-first --header="$_zl_header" \
         "${_zl_preview_args[@]}" "${_zl_binds[@]}"
   )
+  fzf_rc=$?
+  # fzf rc: 0 = selection, 1 = no-match + Enter (type-to-create),
+  # 130 = Esc / Ctrl-C. --print-query emits the query on stdout regardless,
+  # so without this rc check, Esc-after-typing would fall into the
+  # type-to-create branch below and spawn an unintended session.
+  (( fzf_rc == 130 )) && return 0
+
   local -a picker_out=("${(@f)raw}")
   local query=${picker_out[1]:-} choice=${picker_out[2]:-}
 
-  # Esc, or nothing-typed-and-nothing-picked.
-  [[ -z $query && -z $choice ]] && return 0
-
-  # Explicit skip sentinel.
+  # Explicit skip sentinel (default-highlighted or fuzzy-matched via query).
   [[ $choice == "$SKIP_SESSION" ]] && return 0
 
   # Warp wraps the shell in a per-tab ZDOTDIR (warptmp.XXXXXX) whose .zshrc
