@@ -23,8 +23,9 @@ original="$(cat "$tmp_home/.zshrc")"
 env_opts() {
   ZDOTDIR="$tmp_home"
   XDG_DATA_HOME="$tmp_home/.local/share"
+  XDG_CACHE_HOME="$tmp_home/.cache"
   ZELLIJ_CONFIG_DIR="$tmp_home/.config/zellij"
-  export ZDOTDIR XDG_DATA_HOME ZELLIJ_CONFIG_DIR
+  export ZDOTDIR XDG_DATA_HOME XDG_CACHE_HOME ZELLIJ_CONFIG_DIR
 }
 
 # --- 1. install ---
@@ -54,11 +55,17 @@ grep -Fq "$alt_prefix" "$tmp_home/.zshrc" && fail "--no-wire still wrote to .zsh
 say "--no-wire: ok"
 
 # --- 4. uninstall ---
+# Simulate cache accumulated by the hook so we can assert it's cleaned up.
+mkdir -p -- "$tmp_home/.cache/zellij-login/attached"
+: > "$tmp_home/.cache/zellij-login/attached/fake-session"
+: > "$tmp_home/.cache/zellij-login/recent_dirs"
 sh "$ROOT/uninstall.sh" >/dev/null
 [ ! -f "$tmp_home/.local/share/zellij-login/zellij-ssh-login.zsh" ] \
   || fail "hook file not removed"
 [ ! -f "$tmp_home/.config/zellij/layouts/zellij-login.kdl" ] \
   || fail "layout file not removed"
+[ ! -d "$tmp_home/.cache/zellij-login" ] \
+  || fail "cache dir not removed"
 now="$(cat "$tmp_home/.zshrc")"
 [ "$original" = "$now" ] || {
   printf 'expected:\n%s\n---\ngot:\n%s\n' "$original" "$now" >&2

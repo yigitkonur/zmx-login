@@ -11,6 +11,9 @@ ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 LAYOUT_NAME="zellij-login.kdl"
 ZELLIJ_LAYOUT_DIR="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts"
 
+# Hook-authored runtime state (MRU dirs, attach timestamps, session cwds).
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zellij-login"
+
 prefix="$DEFAULT_PREFIX"
 
 for arg in "$@"; do
@@ -40,6 +43,12 @@ rmdir "$prefix" 2>/dev/null || true
 if [ -f "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME" ]; then
   rm -f -- "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
   info "removed $ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
+fi
+
+# Cache dir is wholly ours (MRU dirs, attached timestamps, session cwds).
+if [ -d "$CACHE_DIR" ]; then
+  rm -rf -- "$CACHE_DIR"
+  info "removed cache dir $CACHE_DIR"
 fi
 
 if [ -f "$ZSHRC" ] && grep -Fq "$MARK_OPEN" "$ZSHRC"; then
