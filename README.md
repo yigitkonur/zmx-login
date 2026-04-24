@@ -48,6 +48,16 @@ curl -fsSL https://raw.githubusercontent.com/yigitkonur/zmx-login/main/install.s
   | sh -s -- --no-wire
 ```
 
+## upgrade
+
+same one-liner as install. re-running fetches the latest hook from `main` and overwrites your local copy. the installer detects the existing file and logs `upgraded hook at …` instead of `installed`. the wired block in `.zshrc` is already correct, so it's left alone.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/yigitkonur/zmx-login/main/install.sh | sh
+```
+
+if you pinned to a non-default prefix earlier, re-run with the same `--prefix=…` so you don't end up with two installs.
+
 ## uninstall
 
 ```sh
@@ -63,16 +73,19 @@ strips the marked block from `.zshrc` byte-for-byte and deletes the hook file. y
 ssh in:
 
 ```
+enter = pick highlighted · esc = skip
 zmx session >
-  [+ new session]
+  [ skip · plain shell ]      ← highlighted by default
+  [+ new session ]
   main
   scratch
 ```
 
-- enter on an existing name → attach. cwd + scrollback preserved.
-- enter on `[+ new session]` → type a name → pick a directory → land inside, attached.
+- **enter immediately (don't type anything)** → skip. plain shell, no zmx, no persistence. this is the default so you can bypass the picker with one keystroke.
+- type a session name (or arrow down) → enter → attach. cwd + scrollback preserved.
+- pick `[+ new session ]` → type a name → pick a directory → land inside, attached.
 - ctrl-n in the dir picker → prompts for a subdir name, `mkdir -p`s it, selects it.
-- esc anywhere → quits out to a plain shell. nothing mandatory.
+- esc anywhere → also skips, plain shell.
 
 to detach later, use zmx's detach key (`ctrl+\` by default — see `zmx --help`). session keeps running. next ssh, pick it from the list, pick up where you left off. you can cmd+q your terminal mid-session and the process survives. that's the whole point.
 

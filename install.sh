@@ -170,8 +170,12 @@ else
 fi
 
 mkdir -p -- "$prefix"
+# Re-running the installer over an existing install upgrades it to whatever's
+# in $src (the latest main on curl-pipe, or the clone's copy on a local install).
+action="installed"
+[ -f "$prefix/$HOOK_NAME" ] && action="upgraded"
 cp -- "$src" "$prefix/$HOOK_NAME"
-info "installed hook at $prefix/$HOOK_NAME"
+info "$action hook at $prefix/$HOOK_NAME"
 
 if [ "$wire" -eq 0 ]; then
   info "skipped .zshrc wiring (--no-wire). Source it manually:"

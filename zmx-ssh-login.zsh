@@ -13,15 +13,19 @@ _zmx_login_hook() {
   command -v zmx >/dev/null 2>&1 || { print -u2 "zmx-login: zmx not on PATH"; return 0; }
   command -v fzf >/dev/null 2>&1 || { print -u2 "zmx-login: fzf not on PATH"; return 0; }
 
-  local NEW_SESSION="[+ new session]"
+  local SKIP_SESSION="[ skip · plain shell ]"
+  local NEW_SESSION="[+ new session ]"
   local choice name target picked key sub r
   local -a roots walker_args fzf_out
 
+  # Skip is the first (default-highlighted) item so that Enter on an empty
+  # query lands you in a normal shell with no zmx involvement.
   choice=$(
-    { print -- "$NEW_SESSION"; zmx list --short 2>/dev/null; } \
-    | fzf --height=40% --reverse --prompt="zmx session > " --no-multi
+    { print -- "$SKIP_SESSION"; print -- "$NEW_SESSION"; zmx list --short 2>/dev/null; } \
+    | fzf --height=40% --reverse --prompt="zmx session > " --no-multi \
+        --header-first --header="enter = pick highlighted · esc = skip"
   )
-  [[ -z $choice ]] && return 0
+  [[ -z $choice || $choice == "$SKIP_SESSION" ]] && return 0
 
   if [[ $choice != "$NEW_SESSION" ]]; then
     zmx attach "$choice"
