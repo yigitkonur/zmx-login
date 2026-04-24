@@ -1,0 +1,22 @@
+// zellij-login layout — minimal "shell with persistence" UX.
+//
+// One plain pane for your shell, one line at the bottom showing mode +
+// session name (the zellij:compact-bar built-in). No tab bar, no extra
+// status rows, no nagging — so zellij feels like your terminal with
+// session persistence, not a multiplexer.
+//
+// Mouse works out of the box (configured via `mouse_mode true` in
+// config.kdl, not here). Session-manager, plugin-manager, and everything
+// else remain reachable via Ctrl+o.
+//
+// Why this file and not a config flag? zellij has no "hide_tab_bar"
+// switch — this is the supported way to hide it (see zellij-org/zellij
+// issues #694, #2172, #4504). The layout is the contract.
+//
+// Installed by https://github.com/yigitkonur/zellij-login
+layout {
+    pane
+    pane size=1 borderless=true {
+        plugin location="zellij:compact-bar"
+    }
+}

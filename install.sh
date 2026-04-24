@@ -16,6 +16,12 @@ MARK_OPEN="# zellij-login:hook {{{"
 MARK_CLOSE="# zellij-login:hook }}}"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 
+# Zellij layout we ship for the "shell with persistence, not a multiplexer"
+# experience: one plain pane + a single-line compact-bar.
+LAYOUT_REL_PATH="layouts/zellij-login.kdl"
+LAYOUT_NAME="zellij-login.kdl"
+ZELLIJ_LAYOUT_DIR="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts"
+
 # Legacy-install constants so the new installer can migrate users who had
 # the previous zmx-backed version of this project installed.
 LEGACY_NAME="zmx-login"
@@ -25,18 +31,22 @@ LEGACY_MARK_CLOSE="# ${LEGACY_NAME}:hook }}}"
 
 wire=1
 install_deps=1
+install_config=1
 prefix="$DEFAULT_PREFIX"
 
 usage() {
   cat <<EOF
-Usage: sh install.sh [--no-wire] [--no-install-deps] [--prefix=PATH]
+Usage: sh install.sh [--no-wire] [--no-install-deps] [--no-zellij-config] [--prefix=PATH]
    or: curl -fsSL ${RAW_URL}/install.sh | sh
    or: curl -fsSL ${RAW_URL}/install.sh | sh -s -- --no-wire
 
-  --no-wire           install the hook file only; do not modify \$ZDOTDIR/.zshrc
-  --no-install-deps   do not attempt to auto-install missing zellij / fzf
-  --prefix=PATH       install hook under PATH (default: $DEFAULT_PREFIX)
-  -h, --help          show this help
+  --no-wire            install the hook file only; do not modify \$ZDOTDIR/.zshrc
+  --no-install-deps    do not attempt to auto-install missing zellij / fzf
+  --no-zellij-config   do not install the "zellij-login" layout into
+                       \$ZELLIJ_CONFIG_DIR/layouts; new sessions then use
+                       whatever default_layout your zellij config selects
+  --prefix=PATH        install hook under PATH (default: $DEFAULT_PREFIX)
+  -h, --help           show this help
 
 Environment (read by the hook at runtime):
   ZELLIJ_LOGIN_ROOTS   colon-separated directories for the dir picker
@@ -51,11 +61,12 @@ EOF
 
 for arg in "$@"; do
   case "$arg" in
-    --no-wire)          wire=0 ;;
-    --no-install-deps)  install_deps=0 ;;
-    --prefix=*)         prefix="${arg#--prefix=}" ;;
-    -h|--help)          usage; exit 0 ;;
-    *)                  printf 'zellij-login: unknown argument: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
+    --no-wire)           wire=0 ;;
+    --no-install-deps)   install_deps=0 ;;
+    --no-zellij-config)  install_config=0 ;;
+    --prefix=*)          prefix="${arg#--prefix=}" ;;
+    -h|--help)           usage; exit 0 ;;
+    *)                   printf 'zellij-login: unknown argument: %s\n' "$arg" >&2; usage >&2; exit 2 ;;
   esac
 done
 
@@ -195,21 +206,32 @@ migrate_legacy() {
 }
 migrate_legacy
 
-# Locate source hook: prefer local copy adjacent to this script, else fetch from GitHub.
+# Resolve hook and layout sources: prefer a local clone adjacent to this script;
+# otherwise fetch from GitHub raw into a single temp dir.
 src=""
-cleanup=""
+src_layout=""
 # shellcheck disable=SC1007  # intentional: unset CDPATH for this cd only
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)" || script_dir=""
 if [ -n "$script_dir" ] && [ -f "$script_dir/$HOOK_NAME" ]; then
   src="$script_dir/$HOOK_NAME"
+  [ -f "$script_dir/$LAYOUT_REL_PATH" ] && src_layout="$script_dir/$LAYOUT_REL_PATH"
   info "installing from local clone ($script_dir)"
 else
   command -v curl >/dev/null 2>&1 || die "neither $HOOK_NAME found locally nor curl available"
-  src="$(mktemp "${TMPDIR:-/tmp}/zellij-login.XXXXXX")"
-  cleanup="$src"
-  trap 'rm -f -- "$cleanup"' EXIT
+  _tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/zellij-login.XXXXXX")"
+  trap 'rm -rf -- "$_tmpdir"' EXIT
   info "downloading $HOOK_NAME from $RAW_URL"
-  curl -fsSL "$RAW_URL/$HOOK_NAME" -o "$src" || die "download failed: $RAW_URL/$HOOK_NAME"
+  curl -fsSL "$RAW_URL/$HOOK_NAME" -o "$_tmpdir/$HOOK_NAME" \
+    || die "download failed: $RAW_URL/$HOOK_NAME"
+  src="$_tmpdir/$HOOK_NAME"
+  if [ "$install_config" -eq 1 ]; then
+    info "downloading $LAYOUT_NAME from $RAW_URL"
+    if curl -fsSL "$RAW_URL/$LAYOUT_REL_PATH" -o "$_tmpdir/$LAYOUT_NAME"; then
+      src_layout="$_tmpdir/$LAYOUT_NAME"
+    else
+      warn "layout download failed — proceeding without zellij-login layout"
+    fi
+  fi
 fi
 
 mkdir -p -- "$prefix"
@@ -219,6 +241,19 @@ action="installed"
 [ -f "$prefix/$HOOK_NAME" ] && action="upgraded"
 cp -- "$src" "$prefix/$HOOK_NAME"
 info "$action hook at $prefix/$HOOK_NAME"
+
+# Install the zellij-login layout (single pane + compact-bar, no tab bar)
+# unless the user opted out via --no-zellij-config. This is what makes new
+# sessions feel like "shell with persistence" instead of a multiplexer.
+if [ "$install_config" -eq 1 ] && [ -n "$src_layout" ]; then
+  mkdir -p -- "$ZELLIJ_LAYOUT_DIR"
+  layout_action="installed"
+  [ -f "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME" ] && layout_action="updated"
+  cp -- "$src_layout" "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
+  info "$layout_action layout at $ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
+elif [ "$install_config" -eq 0 ]; then
+  info "skipped zellij-login layout (--no-zellij-config)"
+fi
 
 if [ "$wire" -eq 0 ]; then
   info "skipped .zshrc wiring (--no-wire). Source it manually:"

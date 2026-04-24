@@ -23,7 +23,8 @@ original="$(cat "$tmp_home/.zshrc")"
 env_opts() {
   ZDOTDIR="$tmp_home"
   XDG_DATA_HOME="$tmp_home/.local/share"
-  export ZDOTDIR XDG_DATA_HOME
+  ZELLIJ_CONFIG_DIR="$tmp_home/.config/zellij"
+  export ZDOTDIR XDG_DATA_HOME ZELLIJ_CONFIG_DIR
 }
 
 # --- 1. install ---
@@ -33,6 +34,10 @@ grep -Fq '# zellij-login:hook {{{' "$tmp_home/.zshrc" \
   || fail "marker not added to .zshrc"
 [ -f "$tmp_home/.local/share/zellij-login/zellij-ssh-login.zsh" ] \
   || fail "hook file not placed"
+[ -f "$tmp_home/.config/zellij/layouts/zellij-login.kdl" ] \
+  || fail "layout file not placed"
+grep -Fq 'zellij:compact-bar' "$tmp_home/.config/zellij/layouts/zellij-login.kdl" \
+  || fail "layout file content unexpected"
 say "install: ok"
 
 # --- 2. idempotency ---
@@ -52,6 +57,8 @@ say "--no-wire: ok"
 sh "$ROOT/uninstall.sh" >/dev/null
 [ ! -f "$tmp_home/.local/share/zellij-login/zellij-ssh-login.zsh" ] \
   || fail "hook file not removed"
+[ ! -f "$tmp_home/.config/zellij/layouts/zellij-login.kdl" ] \
+  || fail "layout file not removed"
 now="$(cat "$tmp_home/.zshrc")"
 [ "$original" = "$now" ] || {
   printf 'expected:\n%s\n---\ngot:\n%s\n' "$original" "$now" >&2
@@ -94,5 +101,18 @@ grep -Fq '# zellij-login:hook {{{' "$tmp_home/.zshrc" \
 [ -f "$tmp_home/.local/share/zellij-login/zellij-ssh-login.zsh" ] \
   || fail "new hook file not placed during migration"
 say "legacy-migration: ok"
+
+# --- 7. --no-zellij-config ---
+# The installer should place the hook but SKIP the layout.
+rm -rf -- "$tmp_home/.local/share/zellij-login" "$tmp_home/.config/zellij"
+cat > "$tmp_home/.zshrc" <<'EOF'
+# my dotfile
+EOF
+sh "$ROOT/install.sh" --no-install-deps --no-zellij-config >/dev/null
+[ -f "$tmp_home/.local/share/zellij-login/zellij-ssh-login.zsh" ] \
+  || fail "--no-zellij-config did not install hook"
+[ ! -f "$tmp_home/.config/zellij/layouts/zellij-login.kdl" ] \
+  || fail "--no-zellij-config still wrote the layout file"
+say "--no-zellij-config: ok"
 
 say "all tests passed"

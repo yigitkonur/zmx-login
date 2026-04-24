@@ -8,6 +8,9 @@ MARK_OPEN="# zellij-login:hook {{{"
 MARK_CLOSE="# zellij-login:hook }}}"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 
+LAYOUT_NAME="zellij-login.kdl"
+ZELLIJ_LAYOUT_DIR="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts"
+
 prefix="$DEFAULT_PREFIX"
 
 for arg in "$@"; do
@@ -31,6 +34,13 @@ if [ -f "$prefix/$HOOK_NAME" ]; then
   info "removed $prefix/$HOOK_NAME"
 fi
 rmdir "$prefix" 2>/dev/null || true
+
+# The zellij-login layout is ours — take it with us. Leave other user layouts
+# (and the layouts/ dir itself if non-empty) alone.
+if [ -f "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME" ]; then
+  rm -f -- "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
+  info "removed $ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
+fi
 
 if [ -f "$ZSHRC" ] && grep -Fq "$MARK_OPEN" "$ZSHRC"; then
   tmp="$(mktemp)"

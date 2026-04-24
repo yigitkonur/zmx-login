@@ -81,7 +81,15 @@ _zellij_login_hook() {
   fi
 
   cd -- "$target" || return 0
-  zellij attach -c "$name"
+
+  # Prefer our minimal "shell with persistence" layout if the installer placed
+  # it. Falls back to the user's default_layout when the file isn't there
+  # (e.g., they ran the installer with --no-zellij-config).
+  local -a zj_args
+  zj_args=(attach -c "$name")
+  [[ -r ${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts/zellij-login.kdl ]] \
+    && zj_args+=(--layout zellij-login)
+  zellij "${zj_args[@]}"
 }
 
 _zellij_login_hook

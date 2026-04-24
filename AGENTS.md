@@ -4,7 +4,7 @@ Instructions for AI agents (Claude Code, Codex, Cursor, etc.) working in this re
 
 ## What this is
 
-A ~500-line zsh hook project. On interactive SSH login, the hook sources from `.zshrc`, prompts the user for a [zellij](https://zellij.dev/) session via `fzf`, and either attaches to an existing one or creates a new one after picking a directory with an `fzf --walker=dir` picker. POSIX-sh installer and uninstaller wire it into `.zshrc` via a marker-delimited block. The installer also auto-migrates users upgrading from the previous (zmx-based) version of this project.
+A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.zshrc`, prompts the user for a [zellij](https://zellij.dev/) session via `fzf`, and either attaches to an existing one or creates a new one after picking a directory with an `fzf --walker=dir` picker. POSIX-sh installer and uninstaller wire it into `.zshrc` via a marker-delimited block. The installer also ships a minimal zellij layout (`layouts/zellij-login.kdl`) — one plain pane + a one-line `zellij:compact-bar` status strip, no tab bar — so new sessions feel like "shell with persistence" instead of a multiplexer. The installer auto-migrates users upgrading from the previous (zmx-based) version of this project.
 
 ## Non-goals
 
@@ -13,6 +13,8 @@ A ~500-line zsh hook project. On interactive SSH login, the hook sources from `.
 - **Rewrite in Go / Rust / Python.** Adding a compile toolchain to install a shell fragment defeats the point.
 - **Feature growth.** The hook does one thing: pick + attach. Configuration is env-var only (`ZELLIJ_LOGIN_ROOTS`, `ZELLIJ_LOGIN_SKIP`). Don't add CLI flags to the hook, YAML config, or session templates.
 - **New dependencies.** Allowed: `zsh`, `zellij`, `fzf`, coreutils, `awk`. Not allowed: `gum`, `broot`, `yazi`, `jq`, anything else.
+- **Third-party zellij plugins in the default.** Stick to `zellij:*` built-ins. Third-party plugins require managing zellij's permission cache (`~/.cache/zellij/permissions.kdl`, format officially undocumented) and force a permission-prompt flow that's fragile on upgrades. If a specific third-party plugin becomes essential, cover it in docs as an opt-in, never in the default layout.
+- **Mutating the user's `config.kdl`.** The layout file is our surface; config.kdl is theirs. README documents optional config tweaks users can paste; the installer never appends to config.kdl.
 
 ## Hard constraints
 
@@ -23,6 +25,8 @@ A ~500-line zsh hook project. On interactive SSH login, the hook sources from `.
   - Byte-for-byte `.zshrc` restore on uninstall.
   - Silent bailout on non-interactive shells, IDE remote shells, already-in-zellij, missing deps.
   - Legacy `zmx-login` install is cleanly migrated (marker block stripped, old dir removed) when the new installer runs.
+  - `--no-zellij-config` skips the layout install; the hook still works, falling back to the user's `default_layout`.
+  - Uninstaller removes `zellij-login.kdl` from `$ZELLIJ_CONFIG_DIR/layouts/` and leaves other layouts alone.
 - **No changes to** `~/.ssh/*`, `/etc/ssh/sshd_config`, SSH `ForceCommand`, or `~/.ssh/rc`. The hook's only integration point is `.zshrc`.
 - **Hot path discipline.** The hook runs on every interactive SSH login. Any work added before the short-circuit guards (interactive / `SSH_TTY` / `ZELLIJ` / IDE exclusions / skip flag) is a hot-path regression. Guards must be parameter expansions only — no subshells, no external commands — until we've confirmed the user wants the hook to fire.
 
@@ -54,10 +58,11 @@ Conventional Commits with a short, descriptive scope — `feat(hook): …`, `fix
 
 | Path | What |
 | --- | --- |
-| `zellij-ssh-login.zsh` | The hook. ~85 lines. |
-| `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, and zmx-login → zellij-login migration. |
-| `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk. |
-| `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration test. |
+| `zellij-ssh-login.zsh` | The hook. ~90 lines. |
+| `layouts/zellij-login.kdl` | Single-pane + one-line `zellij:compact-bar` layout. Shipped into `$ZELLIJ_CONFIG_DIR/layouts/` by the installer. |
+| `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, layout placement, and zmx-login → zellij-login migration. |
+| `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk; removes the layout file. |
+| `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration/layout/--no-zellij-config test (seven cases). |
 | `Makefile` | `install` / `uninstall` / `check` / `test`. |
 | `.github/workflows/check.yml` | CI runs `make check`-equivalent on every push. |
 | `README.md` | User-facing docs. Casual tone on purpose (dropped-session-friendly). |

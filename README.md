@@ -40,9 +40,10 @@ missing any of the three at runtime (not at install)? the hook prints one stderr
 ### flags
 
 ```
-sh install.sh --no-wire           # place the file, don't touch .zshrc (source it yourself)
-sh install.sh --no-install-deps   # don't try to auto-install zellij / fzf
-sh install.sh --prefix=PATH       # install somewhere other than ~/.local/share/zellij-login
+sh install.sh --no-wire             # place the file, don't touch .zshrc (source it yourself)
+sh install.sh --no-install-deps     # don't try to auto-install zellij / fzf
+sh install.sh --no-zellij-config    # skip installing the "zellij-login" layout
+sh install.sh --prefix=PATH         # install somewhere other than ~/.local/share/zellij-login
 ```
 
 curl-piped with flags:
@@ -91,7 +92,17 @@ zellij session >
 - ctrl-n in the dir picker → prompts for a subdir name, `mkdir -p`s it, selects it.
 - esc anywhere → also skips, plain shell.
 
-to detach later, use zellij's detach key (`ctrl+o d` by default — configurable in `~/.config/zellij/config.kdl`). session keeps running. next ssh, pick it from the list, pick up where you left off. you can cmd+q your terminal mid-session and the process survives. that's the whole point.
+### inside the session
+
+new sessions use a minimal layout this installer ships: **one plain pane and a one-line status bar at the bottom** (session name + current mode). no tab bar, no stacked status rows, no nagging — it feels like a regular terminal with persistence, not a tmux clone.
+
+you don't need to learn splits, tabs, or pane-navigation keybinds. mouse works (click to focus, scroll to scroll back, select to copy). if you ever want the richer UI:
+
+- **ctrl+o** → opens the zellij session manager (attach / detach / rename / kill / resurrect)
+- **ctrl+o d** → detach; session keeps running. next ssh, pick it from the picker, pick up where you left off.
+- **ctrl+o w** → web sharing, if you need it
+
+you can cmd+q your terminal mid-session and the process survives. that's the whole point.
 
 ## config
 
@@ -109,6 +120,23 @@ bypass the hook for one session:
 ```sh
 ZELLIJ_LOGIN_SKIP=1 ssh host
 ```
+
+### optional: tighten zellij's UI further
+
+the layout this installer ships covers the "shell with persistence" feel out of the box. if you want to go further — mute the startup tips and release-notes popups, hide the session name inside pane frames, etc. — add this to your `~/.config/zellij/config.kdl`:
+
+```kdl
+show_startup_tips false
+show_release_notes false
+
+ui {
+    pane_frames {
+        hide_session_name true
+    }
+}
+```
+
+these are user-level config choices, so the installer doesn't touch `config.kdl` — copy what you want.
 
 ## when the hook stays out of your way
 
