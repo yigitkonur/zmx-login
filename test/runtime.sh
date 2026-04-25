@@ -30,7 +30,7 @@ if [ "${1:-}" = "list-sessions" ]; then
   [ -f "${MOCK_SESSIONS:-/nonexistent}" ] && cat "$MOCK_SESSIONS" || true
   exit 0
 fi
-{ printf 'zellij'; for a in "$@"; do printf ' %s' "$a"; done; printf '\n'; } >> "${RUN_LOG:?}"
+{ printf 'zellij'; for a in "$@"; do printf ' <%s>' "$a"; done; printf '\n'; } >> "${RUN_LOG:?}"
 EOF
 chmod +x "$tmp/bin/zellij"
 
@@ -122,6 +122,24 @@ run_hook_with_deadline() {
   return 0
 }
 
+wait_with_deadline() {
+  deadline_pid=$1
+  deadline_ticks=0
+
+  while kill -0 "$deadline_pid" 2>/dev/null; do
+    if [ "$deadline_ticks" -ge "$2" ]; then
+      kill "$deadline_pid" 2>/dev/null || true
+      wait "$deadline_pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 0.1
+    deadline_ticks=$((deadline_ticks + 1))
+  done
+
+  wait "$deadline_pid" 2>/dev/null || true
+  return 0
+}
+
 # NOTE on fzf output shape: the session picker runs with --print-query, so
 # fzf emits the current query on line 1 and the selection (if any) on
 # line 2. Canned outputs below follow that shape: empty first line when
@@ -134,9 +152,58 @@ printf 'existing-session [Created 1h 23m ago]\n' > "$tmp/sessions"
 MOCK_SESSIONS="$tmp/sessions"; export MOCK_SESSIONS
 printf '\n%s\n' '● existing-session' > "$FZF_OUTPUTS_DIR/1"
 run_hook ''
-grep -Fxq 'zellij attach -c -- existing-session' "$RUN_LOG" \
-  || fail "attach-existing: expected 'zellij attach -c -- existing-session'"
+grep -Fxq 'zellij <attach> <-c> <--> <existing-session>' "$RUN_LOG" \
+  || fail "attach-existing: expected 'zellij <attach> <-c> <--> <existing-session>'"
 say "attach-existing: ok"
+
+# --- 1b. attach existing session whose name contains spaces ---
+reset
+printf 'space name [Created 2m ago]\n' > "$tmp/sessions"
+MOCK_SESSIONS="$tmp/sessions"; export MOCK_SESSIONS
+printf '\n%s\n' '● space name' > "$FZF_OUTPUTS_DIR/1"
+run_hook ''
+grep -Fxq 'zellij <attach> <-c> <--> <space name>' "$RUN_LOG" \
+  || fail "attach-space-name: expected one argv item containing the full session name"
+say "attach-space-name: ok"
+
+# --- 1c. helpers parse session names with spaces ---
+reset
+printf 'space name [Created 2m ago]\n' > "$tmp/sessions"
+MOCK_SESSIONS="$tmp/sessions"; export MOCK_SESSIONS
+sh "$ROOT/zellij-login-preview.sh" '● space name' > "$tmp/preview.out"
+grep -Fxq 'status:   active' "$tmp/preview.out" \
+  || fail "preview-space-name: expected preview to find the full spaced session name"
+sh "$ROOT/zellij-login-action.sh" kill '● space name'
+grep -Fxq 'zellij <kill-session> <--> <space name>' "$RUN_LOG" \
+  || fail "action-kill-space-name: expected kill-session to receive the full spaced name"
+say "helpers-space-name: ok"
+
+# --- 1d. clean-dead parses exited session names with spaces ---
+reset
+printf 'dead space [Created 5m ago] EXITED\n' > "$tmp/sessions"
+MOCK_SESSIONS="$tmp/sessions"; export MOCK_SESSIONS
+sh "$ROOT/zellij-login-action.sh" clean-dead
+grep -Fxq 'zellij <delete-session> <--force> <--> <dead space>' "$RUN_LOG" \
+  || fail "clean-dead-space-name: expected delete-session to receive the full spaced name"
+say "clean-dead-space-name: ok"
+
+# --- 1e. helper list/preview paths must not hang on slow zellij list-sessions ---
+reset
+MOCK_SESSIONS_SLEEP=5; export MOCK_SESSIONS_SLEEP
+sh "$ROOT/zellij-login-action.sh" list > "$tmp/action-list.out" 2>/dev/null &
+wait_with_deadline "$!" 30 \
+  || { unset MOCK_SESSIONS_SLEEP; fail "action-list-slow: helper should not wait indefinitely"; }
+grep -Fxq '[ skip · plain shell ]' "$tmp/action-list.out" \
+  || { unset MOCK_SESSIONS_SLEEP; fail "action-list-slow: expected skip sentinel"; }
+grep -Fxq '[+ new session ]' "$tmp/action-list.out" \
+  || { unset MOCK_SESSIONS_SLEEP; fail "action-list-slow: expected new-session sentinel"; }
+sh "$ROOT/zellij-login-preview.sh" '● slow space' > "$tmp/preview-slow.out" 2>/dev/null &
+wait_with_deadline "$!" 30 \
+  || { unset MOCK_SESSIONS_SLEEP; fail "preview-slow: helper should not wait indefinitely"; }
+unset MOCK_SESSIONS_SLEEP
+grep -Fxq 'status:   (not currently known to zellij)' "$tmp/preview-slow.out" \
+  || fail "preview-slow: expected unknown status after bounded slow list"
+say "helpers-slow-list: ok"
 
 # --- 2. new session with the zellij-login layout installed ---
 reset
@@ -145,8 +212,8 @@ printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook 'newsess
 '
-grep -Fxq 'zellij --layout zellij-login attach -c -- newsess' "$RUN_LOG" \
-  || fail "new-with-layout: expected 'zellij --layout zellij-login attach -c -- newsess'"
+grep -Fxq 'zellij <--layout> <zellij-login> <attach> <-c> <--> <newsess>' "$RUN_LOG" \
+  || fail "new-with-layout: expected 'zellij <--layout> <zellij-login> <attach> <-c> <--> <newsess>'"
 say "new-with-layout: ok"
 
 # --- 3. new session when the layout file is absent (e.g. --no-zellij-config) ---
@@ -157,8 +224,8 @@ printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook 'nosess
 '
-grep -Fxq 'zellij attach -c -- nosess' "$RUN_LOG" \
-  || fail "new-without-layout: expected 'zellij attach -c -- nosess'"
+grep -Fxq 'zellij <attach> <-c> <--> <nosess>' "$RUN_LOG" \
+  || fail "new-without-layout: expected 'zellij <attach> <-c> <--> <nosess>'"
 ! grep -Fq -- '--layout' "$RUN_LOG" \
   || fail "new-without-layout: --layout should NOT appear when layout file is missing"
 cp "$ROOT/layouts/zellij-login.kdl" "$ZELLIJ_CONFIG_DIR/layouts/"
@@ -171,7 +238,7 @@ printf '\n%s\n' '[+ new session ]' > "$FZF_OUTPUTS_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook '-xy
 '
-grep -Fxq 'zellij --layout zellij-login attach -c -- -xy' "$RUN_LOG" \
+grep -Fxq 'zellij <--layout> <zellij-login> <attach> <-c> <--> <-xy>' "$RUN_LOG" \
   || fail "dash-name: '-- -xy' separator missing -- name would be parsed as flags"
 say "dash-name: ok"
 
@@ -191,6 +258,17 @@ unset ZELLIJ
 [ ! -s "$RUN_LOG" ] || fail "in-zellij: zellij should not be called"
 say "in-zellij: ok"
 
+# --- 6b. private helper functions must not leak into the interactive shell ---
+reset
+: > "$tmp/sessions"
+MOCK_SESSIONS="$tmp/sessions"; export MOCK_SESSIONS
+printf '\n%s\n' '[ skip · plain shell ]' > "$FZF_OUTPUTS_DIR/1"
+leaked=$(
+  printf '' | zsh -i -c '. "'"$ROOT"'/zellij-ssh-login.zsh" >/dev/null 2>&1; for f in _zl_mtime _zl_list_sessions _zl_dir_candidates; do whence -w "$f" 2>/dev/null | grep -q ": function" && print -r -- "$f"; done; true'
+)
+[ -z "$leaked" ] || fail "function-cleanup: leaked helper functions: $leaked"
+say "function-cleanup: ok"
+
 # --- 7. type-to-create: query matches no session, becomes the new name ---
 # The session-picker fzf emits `typedname\n` (query only, no selection) to
 # simulate "user typed a name that matches nothing, pressed Enter". Real fzf
@@ -202,9 +280,20 @@ printf '%s\n' 'typedname' > "$FZF_OUTPUTS_DIR/1"
 printf '1' > "$FZF_RC_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook ''
-grep -Fxq 'zellij --layout zellij-login attach -c -- typedname' "$RUN_LOG" \
-  || fail "type-to-create: expected 'zellij --layout zellij-login attach -c -- typedname'"
+grep -Fxq 'zellij <--layout> <zellij-login> <attach> <-c> <--> <typedname>' "$RUN_LOG" \
+  || fail "type-to-create: expected 'zellij <--layout> <zellij-login> <attach> <-c> <--> <typedname>'"
 say "type-to-create: ok"
+
+# --- 7b. type-to-create preserves spaces in the new session name ---
+reset
+: > "$tmp/sessions"
+printf '%s\n' 'typed space' > "$FZF_OUTPUTS_DIR/1"
+printf '1' > "$FZF_RC_DIR/1"
+printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
+run_hook ''
+grep -Fxq 'zellij <--layout> <zellij-login> <attach> <-c> <--> <typed space>' "$RUN_LOG" \
+  || fail "type-to-create-space: expected the spaced query as one session-name argv"
+say "type-to-create-space: ok"
 
 # --- 8. type-to-create survives ERR_RETURN ---
 reset
@@ -213,7 +302,7 @@ printf '%s\n' 'errreturn-name' > "$FZF_OUTPUTS_DIR/1"
 printf '1' > "$FZF_RC_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook_err_return ''
-grep -Fxq 'zellij --layout zellij-login attach -c -- errreturn-name' "$RUN_LOG" \
+grep -Fxq 'zellij <--layout> <zellij-login> <attach> <-c> <--> <errreturn-name>' "$RUN_LOG" \
   || fail "err-return: fzf rc=1 should not abort type-to-create"
 say "err-return: ok"
 
@@ -229,7 +318,7 @@ run_hook_with_deadline '' 30 \
 unset MOCK_SESSIONS_SLEEP
 grep -Fxq '[+ new session ]' "$FZF_STDIN_DIR/1" \
   || fail "slow-list: session picker should still receive the new-session sentinel"
-grep -Fxq 'zellij --layout zellij-login attach -c -- slowname' "$RUN_LOG" \
+grep -Fxq 'zellij <--layout> <zellij-login> <attach> <-c> <--> <slowname>' "$RUN_LOG" \
   || fail "slow-list: expected type-to-create to reach zellij attach"
 say "slow-list: ok"
 

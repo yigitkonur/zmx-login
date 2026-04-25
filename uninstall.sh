@@ -8,6 +8,7 @@ ACTION_NAME="zellij-login-action.sh"
 DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
 MARK_OPEN="# zellij-login:hook {{{"
 MARK_CLOSE="# zellij-login:hook }}}"
+MARK_NO_FINAL_NEWLINE="# zellij-login:original-no-final-newline"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 
 LAYOUT_NAME="zellij-login.kdl"
@@ -33,6 +34,16 @@ EOF
 done
 
 info() { printf 'zellij-login: %s\n' "$*"; }
+
+trim_final_newline() {
+  file=$1
+  size=$(wc -c < "$file" | tr -d ' ')
+  [ "$size" -gt 0 ] || return 0
+  tmp_trim="$(mktemp)"
+  dd if="$file" of="$tmp_trim" bs=1 count=$((size - 1)) 2>/dev/null \
+    || { rm -f -- "$tmp_trim"; return 1; }
+  mv -- "$tmp_trim" "$file"
+}
 
 if [ -f "$prefix/$HOOK_NAME" ]; then
   rm -f -- "$prefix/$HOOK_NAME"
@@ -62,6 +73,8 @@ if [ -d "$CACHE_DIR" ]; then
 fi
 
 if [ -f "$ZSHRC" ] && grep -Fq "$MARK_OPEN" "$ZSHRC"; then
+  had_no_final_newline=0
+  grep -Fq "$MARK_NO_FINAL_NEWLINE" "$ZSHRC" && had_no_final_newline=1
   tmp="$(mktemp)"
   trap 'rm -f -- "$tmp"' EXIT
   awk -v o="$MARK_OPEN" -v c="$MARK_CLOSE" '
@@ -69,6 +82,7 @@ if [ -f "$ZSHRC" ] && grep -Fq "$MARK_OPEN" "$ZSHRC"; then
     index($0, c) > 0 { inblock = 0; next }
     !inblock         { print }
   ' "$ZSHRC" > "$tmp"
+  [ "$had_no_final_newline" -eq 1 ] && trim_final_newline "$tmp"
   mv -- "$tmp" "$ZSHRC"
   info "stripped hook block from $ZSHRC"
 fi

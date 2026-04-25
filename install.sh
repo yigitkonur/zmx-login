@@ -16,6 +16,7 @@ ACTION_NAME="zellij-login-action.sh"
 DEFAULT_PREFIX="${XDG_DATA_HOME:-$HOME/.local/share}/zellij-login"
 MARK_OPEN="# zellij-login:hook {{{"
 MARK_CLOSE="# zellij-login:hook }}}"
+MARK_NO_FINAL_NEWLINE="# zellij-login:original-no-final-newline"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 
 # Zellij layout we ship for the "shell with persistence, not a multiplexer"
@@ -75,6 +76,12 @@ done
 info() { printf 'zellij-login: %s\n' "$*"; }
 warn() { printf 'zellij-login: %s\n' "$*" >&2; }
 die()  { warn "$*"; exit 1; }
+
+quote_shell() {
+  printf "'"
+  printf '%s' "$1" | sed "s/'/'\\\\''/g"
+  printf "'"
+}
 
 # Resolve a relative --prefix to an absolute path. The source line we later
 # append to $ZSHRC embeds $prefix verbatim; a relative value like `./foo`
@@ -318,7 +325,9 @@ fi
 
 if [ "$wire" -eq 0 ]; then
   info "skipped .zshrc wiring (--no-wire). Source it manually:"
-  printf '    source %s/%s\n' "$prefix" "$HOOK_NAME"
+  hook_path="$prefix/$HOOK_NAME"
+  hook_path_q=$(quote_shell "$hook_path")
+  printf '    source %s\n' "$hook_path_q"
   exit 0
 fi
 
@@ -326,15 +335,19 @@ fi
 if grep -Fq "$MARK_OPEN" "$ZSHRC" 2>/dev/null; then
   info "$ZSHRC already sources the hook"
 else
+  added_separator=0
   # If $ZSHRC exists with content that doesn't end in a newline, add one
   # so our marker doesn't concatenate onto the last line.
   if [ -s "$ZSHRC" ] && [ -n "$(tail -c 1 "$ZSHRC")" ]; then
     printf '\n' >> "$ZSHRC"
+    added_separator=1
   fi
+  hook_path="$prefix/$HOOK_NAME"
+  hook_path_q=$(quote_shell "$hook_path")
   {
     printf '%s\n' "$MARK_OPEN"
-    printf '[ -r "%s/%s" ] && source "%s/%s"\n' \
-      "$prefix" "$HOOK_NAME" "$prefix" "$HOOK_NAME"
+    [ "$added_separator" -eq 1 ] && printf '%s\n' "$MARK_NO_FINAL_NEWLINE"
+    printf '[ -r %s ] && source %s\n' "$hook_path_q" "$hook_path_q"
     printf '%s\n' "$MARK_CLOSE"
   } >> "$ZSHRC"
   info "wired hook into $ZSHRC"

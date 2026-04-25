@@ -23,6 +23,47 @@ esac
 
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/zellij-login"
 
+list_sessions() {
+  tmp=$(mktemp "${TMPDIR:-/tmp}/zellij-login-sessions.XXXXXX") || return 0
+  zellij list-sessions -n > "$tmp" 2>/dev/null &
+  pid=$!
+  ticks=0
+
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$ticks" -ge 20 ]; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.05
+      kill -9 "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f -- "$tmp"
+      return 0
+    fi
+    sleep 0.05
+    ticks=$((ticks + 1))
+  done
+
+  wait "$pid" 2>/dev/null || true
+  [ -r "$tmp" ] && cat "$tmp"
+  rm -f -- "$tmp"
+}
+
+session_name_from_line() {
+  line=$1
+  name=${line% \[Created *}
+  [ "$name" = "$line" ] && name=${line%% *}
+  printf '%s\n' "$name"
+}
+
+session_line_for_name() {
+  wanted=$1
+  list_sessions | while IFS= read -r line; do
+    name=$(session_name_from_line "$line")
+    [ "$name" = "$wanted" ] || continue
+    printf '%s\n' "$line"
+    break
+  done
+}
+
 # emit_sorted_list: same shape as the hook's _zl_sorted_sessions. Duplicated
 # here (~15 lines) rather than fetched from the hook — this helper is reached
 # through fzf --bind subshells that don't inherit the hook's locals.
@@ -33,9 +74,9 @@ cache="${XDG_CACHE_HOME:-$HOME/.cache}/zellij-login"
 # trigger the create-new-session flow).
 emit_sorted_list() {
   printf '%s\n' "[ skip · plain shell ]"
-  zellij list-sessions -n 2>/dev/null | while IFS= read -r line; do
+  list_sessions | while IFS= read -r line; do
     [ -z "$line" ] && continue
-    name=${line%% *}
+    name=$(session_name_from_line "$line")
     [ -z "$name" ] && continue
     case "$line" in
       *EXITED*) icon='✗' ;;
@@ -85,8 +126,7 @@ case "$action" in
     if is_sentinel "$name"; then exit 0; fi
     # Look up this session's current status; delete-force if exited,
     # plain-kill otherwise. Either way, clean our cache for it.
-    status_line=$(zellij list-sessions -n 2>/dev/null \
-      | awk -v n="$name" '$1 == n { print; exit }')
+    status_line=$(session_line_for_name "$name")
     case "$status_line" in
       *EXITED*) zellij delete-session --force -- "$name" >/dev/null 2>&1 || true ;;
       *)        zellij kill-session -- "$name" >/dev/null 2>&1 || true ;;
@@ -95,8 +135,9 @@ case "$action" in
     ;;
 
   clean-dead)
-    zellij list-sessions -n 2>/dev/null | awk '/EXITED/ { print $1 }' \
-      | while IFS= read -r n; do
+    list_sessions | while IFS= read -r line; do
+          case "$line" in *EXITED*) ;; *) continue ;; esac
+          n=$(session_name_from_line "$line")
           [ -z "$n" ] && continue
           zellij delete-session --force -- "$n" >/dev/null 2>&1 || true
           drop_cache "$n"

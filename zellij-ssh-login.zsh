@@ -29,6 +29,20 @@ _zellij_login_hook() {
     stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || print -- 0
   }
 
+  _zl_session_name_from_line() {
+    local line="$1" parsed
+    parsed=${line% \[Created *}
+    [[ $parsed == "$line" ]] && parsed=${line%% *}
+    print -r -- "$parsed"
+  }
+
+  _zl_valid_new_session_name() {
+    [[ -n $1 ]] || return 1
+    [[ $1 != . && $1 != .. ]] || return 1
+    [[ $1 != */* ]] || return 1
+    [[ $1 != *$'\n'* ]]
+  }
+
   # Touch $CACHE_DIR/attached/<name> so the next picker sorts it to the top.
   # Cheap: a single zero-byte file per session.
   _zl_record_attach() {
@@ -89,7 +103,7 @@ _zellij_login_hook() {
     local line name ts icon
     _zl_list_sessions | while IFS= read -r line; do
       [[ -z $line ]] && continue
-      name=${line%% *}
+      name=$(_zl_session_name_from_line "$line")
       [[ -z $name ]] && continue
       if [[ $line == *EXITED* ]]; then
         icon='✗'
@@ -241,6 +255,11 @@ _zellij_login_hook() {
     return 0
   fi
 
+  if ! _zl_valid_new_session_name "$name"; then
+    print -u2 "zellij-login: invalid session name: $name"
+    return 0
+  fi
+
   if [[ -n $ZELLIJ_LOGIN_ROOTS ]]; then
     roots=(${(s.:.)ZELLIJ_LOGIN_ROOTS})
   else
@@ -290,5 +309,9 @@ _zellij_login_hook() {
   "${zj_args[@]}"
 }
 
-_zellij_login_hook
-unset -f _zellij_login_hook
+_zellij_login_hook || true
+unset -f _zellij_login_hook \
+  _zl_mtime _zl_session_name_from_line _zl_valid_new_session_name \
+  _zl_record_attach _zl_record_cwd _zl_record_recent_dir \
+  _zl_list_sessions _zl_sorted_sessions _zl_dir_candidates \
+  2>/dev/null || true

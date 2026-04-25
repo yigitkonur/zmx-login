@@ -26,9 +26,46 @@ esac
 
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/zellij-login"
 
+list_sessions() {
+  tmp=$(mktemp "${TMPDIR:-/tmp}/zellij-login-sessions.XXXXXX") || return 0
+  zellij list-sessions -n > "$tmp" 2>/dev/null &
+  pid=$!
+  ticks=0
+
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$ticks" -ge 20 ]; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.05
+      kill -9 "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      rm -f -- "$tmp"
+      return 0
+    fi
+    sleep 0.05
+    ticks=$((ticks + 1))
+  done
+
+  wait "$pid" 2>/dev/null || true
+  [ -r "$tmp" ] && cat "$tmp"
+  rm -f -- "$tmp"
+}
+
+session_name_from_line() {
+  line=$1
+  parsed=${line% \[Created *}
+  [ "$parsed" = "$line" ] && parsed=${line%% *}
+  printf '%s\n' "$parsed"
+}
+
 # Pull this session's line out of `zellij list-sessions -n` (no formatting).
-status_line=$(zellij list-sessions -n 2>/dev/null \
-  | awk -v n="$name" '$1 == n { print; exit }')
+status_line=$(
+  list_sessions | while IFS= read -r line; do
+    parsed=$(session_name_from_line "$line")
+    [ "$parsed" = "$name" ] || continue
+    printf '%s\n' "$line"
+    break
+  done
+)
 
 if [ -z "$status_line" ]; then
   printf 'session:  %s\n' "$name"
@@ -70,3 +107,4 @@ printf 'status:   %s\n' "$status"
 [ -n "$created" ] && printf 'created:  %s ago\n' "$created"
 [ -n "$last" ]    && printf 'last:     %s\n' "$last"
 [ -n "$cwd" ]     && printf 'cwd:      %s\n' "$cwd"
+exit 0

@@ -85,6 +85,34 @@ now="$(cat "$tmp_home/.zshrc")"
 }
 say "uninstall: ok"
 
+# --- 4b. uninstall restores a no-final-newline .zshrc byte-for-byte ---
+env_opts
+rm -rf -- "$tmp_home/.local/share/zellij-login" "$tmp_home/.config/zellij"
+printf 'export FOO=no-final-newline' > "$tmp_home/.zshrc"
+cp "$tmp_home/.zshrc" "$tmp_home/.zshrc.no-final.orig"
+sh "$ROOT/install.sh" --no-install-deps >/dev/null
+sh "$ROOT/uninstall.sh" >/dev/null
+cmp -s "$tmp_home/.zshrc.no-final.orig" "$tmp_home/.zshrc" \
+  || fail ".zshrc without final newline was not restored byte-for-byte"
+say "uninstall-no-final-newline: ok"
+
+# --- 4c. custom prefix is shell-quoted in the generated .zshrc source line ---
+env_opts
+rm -rf -- "$tmp_home/.local/share/zellij-login" "$tmp_home/.config/zellij"
+cat > "$tmp_home/.zshrc" <<'EOF'
+# my dotfile
+EOF
+weird_prefix="$tmp_home/prefix with spaces 'quote' dollar\$ back\\slash \"dbl\""
+sh "$ROOT/install.sh" --no-install-deps --prefix="$weird_prefix" >/dev/null
+[ -f "$weird_prefix/zellij-ssh-login.zsh" ] \
+  || fail "weird --prefix did not place hook"
+zsh -n "$tmp_home/.zshrc" >/dev/null 2>&1 \
+  || fail "weird --prefix generated invalid zsh"
+ZDOTDIR="$tmp_home" zsh -c ". \"$tmp_home/.zshrc\"" >/dev/null 2>&1 \
+  || fail "weird --prefix source line did not source cleanly"
+sh "$ROOT/uninstall.sh" --prefix="$weird_prefix" >/dev/null
+say "prefix-shell-quote: ok"
+
 # --- 5. non-interactive sourcing is a silent no-op ---
 # zsh -c runs a non-interactive shell, so the hook bails on the [[ -o interactive ]]
 # guard. This verifies the hook doesn't error out in that path -- it does NOT exercise
