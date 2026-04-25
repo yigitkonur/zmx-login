@@ -2,6 +2,8 @@
 
 a zsh hook. ssh into a box, get prompted for a [zellij](https://zellij.dev/) session — attach to one you already have, or spin up a new one in a directory you pick with fzf. sessions survive disconnect, cmd+q, flaky wifi, whatever. that's zellij doing the work; this just asks the right question at the right time.
 
+out of the box: mouse works (click tabs, drag borders, scroll scrollback), chrome/macos-style tabs via `alt+t` / `alt+w` / `alt+1..9`, no prefix-key mode dance. the installer full-replaces your `~/.config/zellij/config.kdl` with a curated one; your old one, if any, is preserved at `config.kdl.zellij-login.bak` and restored on uninstall. opt out with `--no-zellij-config`.
+
 mac + linux. zsh-only. no compile step. the hook is ~85 lines, the installer is POSIX sh, there's nothing clever going on.
 
 ## coming from zmx-login?
@@ -42,7 +44,7 @@ missing any of the three at runtime (not at install)? the hook prints one stderr
 ```
 sh install.sh --no-wire             # place the file, don't touch .zshrc (source it yourself)
 sh install.sh --no-install-deps     # don't try to auto-install zellij / fzf
-sh install.sh --no-zellij-config    # skip installing the "zellij-login" layout
+sh install.sh --no-zellij-config    # skip BOTH the "zellij-login" layout AND our config.kdl override
 sh install.sh --prefix=PATH         # install somewhere other than ~/.local/share/zellij-login
 ```
 
@@ -103,13 +105,93 @@ zellij session >
 
 new sessions use a minimal layout this installer ships: **one plain pane and a one-line status bar at the bottom** (session name + current mode). no tab bar, no stacked status rows, no nagging — it feels like a regular terminal with persistence, not a tmux clone.
 
-you don't need to learn splits, tabs, or pane-navigation keybinds. mouse works (click to focus, scroll to scroll back, select to copy). if you ever want the richer UI:
-
-- **ctrl+o** → opens the zellij session manager (attach / detach / rename / kill / resurrect)
-- **ctrl+o d** → detach; session keeps running. next ssh, pick it from the picker, pick up where you left off.
-- **ctrl+o w** → web sharing, if you need it
+mouse works out of the box: click a tab to switch, click a pane to focus, drag a border to resize, scroll to see scrollback, hover follows focus. select-to-copy uses your terminal's own clipboard integration.
 
 you can cmd+q your terminal mid-session and the process survives. that's the whole point.
+
+### keybinds
+
+chrome/macos-parallel. `alt` = `option` on mac. no prefix-key dance — these are always active.
+
+| shortcut | what (chrome/macos parallel) |
+| --- | --- |
+| `alt+t` | new tab (cmd+t) |
+| `alt+w` | close tab (cmd+w) |
+| `alt+1`..`alt+9` | jump to tab 1..9 (cmd+1..9) |
+| `alt+]` / `alt+[` | next / prev tab (cmd+shift+] / cmd+shift+[) |
+| `ctrl+tab` / `ctrl+shift+tab` | next / prev tab (same as above, for terminals that forward these) |
+| `alt+n` | new pane |
+| `alt+q` | close pane |
+| `alt+h` / `alt+j` / `alt+k` / `alt+l` | focus pane left / down / up / right |
+| `alt+z` | zoom focused pane fullscreen (toggle) |
+| `alt+r` | rename tab (enter commits, esc cancels) |
+| `alt+d` | detach — session keeps running; ssh back and pick it |
+| `ctrl+o` | zellij session manager (attach / rename / kill / resurrect) |
+
+> **heads-up for macOS Terminal.app users**: "use Option as Meta key" is **off by default** there — `alt+t` fires nothing until you enable it (Settings → Profiles → Keyboard). iTerm2 / WezTerm / Ghostty / Alacritty / Kitty all have it on by default.
+
+### wait, what about cmd+t?
+
+mac `cmd` keys are eaten by the terminal emulator before zellij sees them — it's a terminal-layer thing, not a zellij-layer thing. every serious mac terminal lets you remap `cmd+t` to emit what zellij reads as `alt+t` (literally `ESC` + `t`). pick your terminal, paste into its config, `cmd+t` now opens a new zellij tab:
+
+**iTerm2** — Settings → Keys → Key Bindings → `+`, keystroke `⌘T`, action "Send Text with 'vim' Special Chars", text `\<M-t>`. Repeat for `w n [ ] 1..9`.
+
+**WezTerm** (`~/.wezterm.lua`):
+
+```lua
+local wezterm = require 'wezterm'
+local act = wezterm.action
+return {
+  keys = {
+    { key='t', mods='CMD',       action = act.SendString '\x1bt' },
+    { key='w', mods='CMD',       action = act.SendString '\x1bw' },
+    { key='n', mods='CMD',       action = act.SendString '\x1bn' },
+    { key='[', mods='CMD|SHIFT', action = act.SendString '\x1b[' },
+    { key=']', mods='CMD|SHIFT', action = act.SendString '\x1b]' },
+    { key='1', mods='CMD',       action = act.SendString '\x1b1' },
+    -- ...repeat for 2..9
+  },
+}
+```
+
+**Ghostty** (`~/.config/ghostty/config`):
+
+```
+keybind = cmd+t=text:\x1bt
+keybind = cmd+w=text:\x1bw
+keybind = cmd+n=text:\x1bn
+keybind = cmd+shift+bracket_left=text:\x1b[
+keybind = cmd+shift+bracket_right=text:\x1b]
+keybind = cmd+one=text:\x1b1
+# ...repeat for two..nine
+```
+
+**Alacritty** (`~/.config/alacritty/alacritty.toml`):
+
+```toml
+[[keyboard.bindings]]
+key = "T"
+mods = "Command"
+chars = "\u001bt"
+
+[[keyboard.bindings]]
+key = "W"
+mods = "Command"
+chars = "\u001bw"
+# ...repeat for N / bracket keys / Key1..Key9 — chars is "\u001b" + that key's character
+```
+
+**Kitty** (`~/.config/kitty/kitty.conf`):
+
+```
+map cmd+t send_text all \x1bt
+map cmd+w send_text all \x1bw
+map cmd+n send_text all \x1bn
+map cmd+1 send_text all \x1b1
+# ...repeat for 2..9 and the bracket keys
+```
+
+**Terminal.app** has no real GUI for this — either learn `option+t` or switch terminals.
 
 ## config
 
@@ -128,22 +210,15 @@ bypass the hook for one session:
 ZELLIJ_LOGIN_SKIP=1 ssh host
 ```
 
-### optional: tighten zellij's UI further
+### your old zellij config
 
-the layout this installer ships covers the "shell with persistence" feel out of the box. if you want to go further — mute the startup tips and release-notes popups, hide the session name inside pane frames, etc. — add this to your `~/.config/zellij/config.kdl`:
+if you already had a `~/.config/zellij/config.kdl`, the installer moves it aside to `~/.config/zellij/config.kdl.zellij-login.bak` before writing ours. uninstall puts it back byte-for-byte.
 
-```kdl
-show_startup_tips false
-show_release_notes false
+if you ever edit our managed `config.kdl` (keeping the `// managed-by: zellij-login` marker on top), uninstall will notice and **keep your edits** — your `.bak` gets renamed to `config.kdl.zellij-login.restored` so the original is still on disk but no longer in zellij's path.
 
-ui {
-    pane_frames {
-        hide_session_name true
-    }
-}
-```
+want to own the file entirely? remove the `// managed-by: zellij-login` marker line. the uninstaller then leaves it alone.
 
-these are user-level config choices, so the installer doesn't touch `config.kdl` — copy what you want.
+if both `config.kdl` (user-owned, no marker) and `config.kdl.zellij-login.bak` already exist when you run the installer, it refuses-on-collision — exits non-zero with a clear error rather than silently clobbering your edits. move or remove one and re-run.
 
 ## when the hook stays out of your way
 
@@ -204,16 +279,24 @@ the installer warns but doesn't hard-fail. `brew install zellij` (mac) or `apt i
 **detaching from zellij drops me into a plain shell instead of closing ssh.**
 that's on purpose. if the hook used `exec`, a zellij crash would log you out of ssh entirely. the compromise: after detach you land in the outer login shell — just type `exit` once to close ssh.
 
-**i want to test changes without nuking my `.zshrc`.**
+**i want to test changes without nuking my `.zshrc` or `config.kdl`.**
 sandbox pattern:
 
 ```sh
 tmp=$(mktemp -d)
-ZDOTDIR=$tmp XDG_DATA_HOME=$tmp/.local/share sh install.sh --no-install-deps
-# poke around: cat $tmp/.zshrc, ls $tmp/.local/share/zellij-login/
-ZDOTDIR=$tmp XDG_DATA_HOME=$tmp/.local/share sh uninstall.sh
+export ZDOTDIR=$tmp \
+       XDG_DATA_HOME=$tmp/.local/share \
+       XDG_CACHE_HOME=$tmp/.cache \
+       XDG_STATE_HOME=$tmp/.local/state \
+       ZELLIJ_CONFIG_DIR=$tmp/.config/zellij
+sh install.sh --no-install-deps
+# poke around: cat $tmp/.zshrc, ls $tmp/.local/share/zellij-login/,
+#              cat $tmp/.config/zellij/config.kdl
+sh uninstall.sh
 rm -rf $tmp
 ```
+
+`XDG_STATE_HOME` matters — the config.kdl sha sidecar lives there, and without the override the sandbox would write into your real `~/.local/state`.
 
 **i want to see what's in my `.zshrc` without opening the file.**
 

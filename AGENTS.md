@@ -4,7 +4,7 @@ Instructions for AI agents (Claude Code, Codex, Cursor, etc.) working in this re
 
 ## What this is
 
-A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.zshrc`, prompts the user for a [zellij](https://zellij.dev/) session via `fzf`, and either attaches to an existing one or creates a new one after picking a directory with a `find`-backed `fzf` picker. POSIX-sh installer and uninstaller wire it into `.zshrc` via a marker-delimited block. The installer also ships a minimal zellij layout (`layouts/zellij-login.kdl`) — one plain pane + a one-line `zellij:compact-bar` status strip, no tab bar — so new sessions feel like "shell with persistence" instead of a multiplexer. The installer auto-migrates users upgrading from the previous (zmx-based) version of this project.
+A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.zshrc`, prompts the user for a [zellij](https://zellij.dev/) session via `fzf`, and either attaches to an existing one or creates a new one after picking a directory with a `find`-backed `fzf` picker. POSIX-sh installer and uninstaller wire it into `.zshrc` via a marker-delimited block. The installer also ships a minimal zellij layout (`layouts/zellij-login.kdl`) — one plain pane + a one-line `zellij:compact-bar` status strip, no tab bar — and a curated `zellij-login-config.kdl` (frameless UI, mouse-on, Chrome/macOS-style Alt+letter keybinds) that full-replaces the user's `~/.config/zellij/config.kdl` with a byte-preserving backup. The installer auto-migrates users upgrading from the previous (zmx-based) version of this project.
 
 ## Non-goals
 
@@ -14,7 +14,8 @@ A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.
 - **Feature growth.** The hook does one thing: pick + attach. Configuration is env-var only (`ZELLIJ_LOGIN_ROOTS`, `ZELLIJ_LOGIN_SKIP`). Don't add CLI flags to the hook, YAML config, or session templates.
 - **New dependencies.** Allowed: `zsh`, `zellij`, `fzf`, coreutils, `awk`. Not allowed: `gum`, `broot`, `yazi`, `jq`, anything else.
 - **Third-party zellij plugins in the default.** Stick to `zellij:*` built-ins. Third-party plugins require managing zellij's permission cache (`~/.cache/zellij/permissions.kdl`, format officially undocumented) and force a permission-prompt flow that's fragile on upgrades. If a specific third-party plugin becomes essential, cover it in docs as an opt-in, never in the default layout.
-- **Mutating the user's `config.kdl`.** The layout file is our surface; config.kdl is theirs. README documents optional config tweaks users can paste; the installer never appends to config.kdl.
+- **Merging into the user's `config.kdl`.** The installer full-replaces `config.kdl` with a byte-preserving backup — it does not append a marker-delimited block. Zellij does not merge duplicate top-level `keybinds`/`ui` blocks (last-write-wins on parse), so a safe append would require a KDL parser, outside POSIX-sh scope. Full-replace is the only mode.
+- **Binding `Cmd` keys from our config.** macOS `Cmd` chords are consumed by the terminal emulator (Terminal.app, iTerm2, WezTerm, Ghostty, Alacritty, Kitty) before they reach zellij. We ship `Alt+letter` keybinds; users who want literal `Cmd+T/W/N` remap them in their terminal. README documents per-terminal recipes — the installer never touches terminal config.
 
 ## Hard constraints
 
@@ -25,8 +26,12 @@ A ~550-line zsh hook project. On interactive SSH login, the hook sources from `.
   - Byte-for-byte `.zshrc` restore on uninstall.
   - Silent bailout on non-interactive shells, IDE remote shells, already-in-zellij, missing deps.
   - Legacy `zmx-login` install is cleanly migrated (marker block stripped, old dir removed) when the new installer runs.
-  - `--no-zellij-config` skips the layout install; the hook still works, falling back to the user's `default_layout`.
+  - `--no-zellij-config` skips **both** the layout install **and** the `config.kdl` override (no backup, no sidecar, no state dir created); the hook still works, falling back to the user's own zellij config.
   - Uninstaller removes `zellij-login.kdl` from `$ZELLIJ_CONFIG_DIR/layouts/` and leaves other layouts alone.
+  - **`config.kdl` ownership contract.** Two signals — the `// managed-by: zellij-login` marker within the first 5 lines AND a matching sha256 at `$XDG_STATE_HOME/zellij-login/config.sha256` — are required before the uninstaller removes `config.kdl`. Marker absent → user took ownership → do nothing. Marker + sha match → our pristine file → remove and restore `.bak`. Marker + sha mismatch → user edited our managed file → preserve their edits, rename `.bak` → `.zellij-login.restored` alongside.
+  - **At-most-one `.bak`.** If a user-owned `config.kdl` exists AND `.bak` already exists, the installer refuses-on-collision (exits non-zero with a clear `zellij-login:` error), leaving both files byte-unchanged. It never silently overwrites a prior backup.
+  - **Byte-for-byte backup.** When the installer backs up a user's `config.kdl`, the `.bak` matches the original byte-for-byte. Re-running the installer on our managed file does not touch `.bak` (no double-backup, asserted via mtime).
+  - **Shipped `config.kdl` parses with zellij.** `test/roundtrip.sh` runs `zellij --config $CONFIG_TARGET setup --check` after a fresh install (conditional on zellij on PATH) — protects against an edit introducing an invalid option name.
   - **Zellij argv contract** (asserted by `test/runtime.sh`): attach-existing runs `zellij attach -c -- <name>`; new-with-layout runs `zellij --layout zellij-login attach -c -- <name>`; new-without-layout (layout file absent) runs `zellij attach -c -- <name>` with no `--layout`. `--layout` is a zellij top-level flag and must come *before* `attach`; the `--` separator is required because user-typed names can start with `-`. The new-session `<name>` may originate from the `[+ new session ]` + `read -r name` flow *or* from the `--print-query` "type-to-create" flow (query that matched no existing session); argv shape is identical in both cases.
 - **No changes to** `~/.ssh/*`, `/etc/ssh/sshd_config`, SSH `ForceCommand`, or `~/.ssh/rc`. The hook's only integration point is `.zshrc`.
 - **Hot path discipline.** The hook runs on every interactive SSH login. Any work added before the short-circuit guards (interactive / `SSH_TTY` / `ZELLIJ` / IDE exclusions / skip flag) is a hot-path regression. Guards must be parameter expansions only — no subshells, no external commands — until we've confirmed the user wants the hook to fire.
@@ -46,15 +51,22 @@ No remote CI. Enforcement is client-side: run `make hooks` once in your clone an
 
 ## Testing locally
 
-Never exercise `install.sh` against your real `.zshrc`. Use the sandbox pattern from `test/roundtrip.sh`:
+Never exercise `install.sh` against your real `.zshrc` or `~/.config/zellij/config.kdl`. Use the sandbox pattern from `test/roundtrip.sh`:
 
 ```sh
 tmp=$(mktemp -d)
-ZDOTDIR=$tmp XDG_DATA_HOME=$tmp/.local/share sh install.sh --no-install-deps
+export ZDOTDIR=$tmp \
+       XDG_DATA_HOME=$tmp/.local/share \
+       XDG_CACHE_HOME=$tmp/.cache \
+       XDG_STATE_HOME=$tmp/.local/state \
+       ZELLIJ_CONFIG_DIR=$tmp/.config/zellij
+sh install.sh --no-install-deps
 # inspect / exercise
-ZDOTDIR=$tmp XDG_DATA_HOME=$tmp/.local/share sh uninstall.sh
+sh uninstall.sh
 rm -rf $tmp
 ```
+
+`XDG_STATE_HOME` matters now — the config.kdl sha sidecar lands under `$XDG_STATE_HOME/zellij-login/`; without overriding it, the sandbox would write into your real `~/.local/state`.
 
 ## Commit messages
 
@@ -68,9 +80,11 @@ Conventional Commits with a short, descriptive scope — `feat(hook): …`, `fix
 | `zellij-login-preview.sh` | POSIX-sh fzf preview renderer (session metadata). Installed alongside the hook. |
 | `zellij-login-action.sh` | POSIX-sh fzf `--bind` target for destructive keys (kill / clean-dead) and for `reload()` list generation. Installed alongside the hook. |
 | `layouts/zellij-login.kdl` | Single-pane + one-line `zellij:compact-bar` layout. Shipped into `$ZELLIJ_CONFIG_DIR/layouts/` by the installer. |
-| `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, layout + helper placement, and zmx-login → zellij-login migration. |
-| `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk; removes the helpers, layout, and `$XDG_CACHE_HOME/zellij-login/`. |
-| `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration/layout/--no-zellij-config/curl-pipe-detection test (eight cases). Also asserts helpers and cache dir lifecycle. |
+| `zellij-login-config.kdl` | Curated zellij config.kdl. First line is `// managed-by: zellij-login` (the ownership marker). Full-replaces `$ZELLIJ_CONFIG_DIR/config.kdl` with the user's prior content preserved at `config.kdl.zellij-login.bak`. |
+| `install.sh` | POSIX-sh installer. Handles local-clone and curl-pipe installs, Homebrew bootstrap, dep auto-install, layout + config.kdl + helper placement, marker+sha ownership recording, and zmx-login → zellij-login migration. |
+| `uninstall.sh` | POSIX-sh uninstaller. Strips the marker block with awk; removes the helpers, layout, cache dir, and — when the marker+sha match — the managed config.kdl (restoring `.bak`). If the user edited our managed config.kdl, preserves their edits and renames `.bak` → `.zellij-login.restored`. |
+| `$XDG_STATE_HOME/zellij-login/config.sha256` | Sidecar written by the installer: sha256 of the shipped config.kdl at install time. Compared on uninstall to detect user edits to the managed file. Not a repo file — created at install time on the user's machine. |
+| `test/roundtrip.sh` | Sandbox install/idempotency/uninstall/migration/layout/--no-zellij-config/curl-pipe-detection + ten config.kdl cases (fresh, preserve-user, reinstall-idempotent, uninstall-restores, uninstall-fresh, --no-zellij-config, user-took-ownership, user-edited-managed, bak-collision-refuses, zellij-setup-check). Eighteen cases total. Also asserts helpers and cache dir lifecycle. |
 | `test/runtime.sh` | PATH-shim runtime test (nine cases). Drives the hook under `zsh -i` in a sandbox HOME with fake `zellij` + `fzf` binaries; asserts exact argv shape for attach/create/skip/type-to-create/Esc-with-query/depth-cap flows. The fzf shim supports `FZF_OUTPUTS_DIR/<idx>`, `FZF_STDIN_DIR/<idx>`, and `FZF_RC_DIR/<idx>` for per-call output / stdin capture / exit-code simulation. |
 | `Makefile` | `install` / `uninstall` / `check` / `test` / `hooks`. |
 | `.githooks/pre-push` | Runs `make check` before every `git push`. Enable via `make hooks`. |

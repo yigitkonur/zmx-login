@@ -11,7 +11,21 @@ MARK_CLOSE="# zellij-login:hook }}}"
 ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 
 LAYOUT_NAME="zellij-login.kdl"
-ZELLIJ_LAYOUT_DIR="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts"
+ZELLIJ_CONFIG_DIR_PATH="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}"
+ZELLIJ_LAYOUT_DIR="$ZELLIJ_CONFIG_DIR_PATH/layouts"
+
+# Managed config.kdl. Two signals prove ownership before we touch it:
+#   - marker comment in the first 5 lines of the file
+#   - sha256 sidecar matching the current file content
+# If the user edited our managed config, we preserve their edits and
+# rename the stashed backup to *.restored alongside.
+CONFIG_NAME="config.kdl"
+CONFIG_TARGET="$ZELLIJ_CONFIG_DIR_PATH/$CONFIG_NAME"
+CONFIG_BACKUP="$CONFIG_TARGET.zellij-login.bak"
+CONFIG_RESTORED_ALONGSIDE="$CONFIG_TARGET.zellij-login.restored"
+CONFIG_MARKER="// managed-by: zellij-login"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zellij-login"
+CONFIG_SHA_SIDECAR="$STATE_DIR/config.sha256"
 
 # Hook-authored runtime state (MRU dirs, attach timestamps, session cwds).
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zellij-login"
@@ -33,6 +47,13 @@ EOF
 done
 
 info() { printf 'zellij-login: %s\n' "$*"; }
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 if [ -f "$prefix/$HOOK_NAME" ]; then
   rm -f -- "$prefix/$HOOK_NAME"
@@ -54,6 +75,38 @@ if [ -f "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME" ]; then
   rm -f -- "$ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
   info "removed $ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
 fi
+
+# config.kdl decision tree:
+#   - no marker in first 5 lines      → user took ownership; leave it alone.
+#   - marker + sha matches sidecar    → pristine ours; remove + restore .bak.
+#   - marker + sha differs (or sha    → user edited our managed file; keep
+#     sidecar missing)                  their edits, rename .bak to .restored.
+if [ -f "$CONFIG_TARGET" ] \
+    && sed -n '1,5p' "$CONFIG_TARGET" 2>/dev/null | grep -Fq "$CONFIG_MARKER"; then
+  sha_now=""
+  sha_recorded=""
+  sha_now="$(sha256_file "$CONFIG_TARGET" 2>/dev/null)"
+  [ -f "$CONFIG_SHA_SIDECAR" ] && sha_recorded="$(cat "$CONFIG_SHA_SIDECAR" 2>/dev/null)"
+  if [ -n "$sha_now" ] && [ -n "$sha_recorded" ] && [ "$sha_now" = "$sha_recorded" ]; then
+    rm -f -- "$CONFIG_TARGET"
+    info "removed $CONFIG_TARGET"
+    if [ -f "$CONFIG_BACKUP" ]; then
+      mv -- "$CONFIG_BACKUP" "$CONFIG_TARGET"
+      info "restored $CONFIG_TARGET from backup"
+    fi
+  else
+    info "preserved user-edited $CONFIG_TARGET"
+    if [ -f "$CONFIG_BACKUP" ]; then
+      mv -- "$CONFIG_BACKUP" "$CONFIG_RESTORED_ALONGSIDE"
+      info "original config preserved at $CONFIG_RESTORED_ALONGSIDE"
+    fi
+  fi
+fi
+# Always clean up the sidecar and state dir — they're ours regardless of
+# whether the managed config.kdl was present with our marker (user may have
+# deleted config.kdl or stripped the marker to take ownership).
+[ -f "$CONFIG_SHA_SIDECAR" ] && rm -f -- "$CONFIG_SHA_SIDECAR"
+rmdir "$STATE_DIR" 2>/dev/null || true
 
 # Cache dir is wholly ours (MRU dirs, attached timestamps, session cwds).
 if [ -d "$CACHE_DIR" ]; then

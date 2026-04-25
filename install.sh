@@ -22,7 +22,21 @@ ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"
 # experience: one plain pane + a single-line compact-bar.
 LAYOUT_REL_PATH="layouts/zellij-login.kdl"
 LAYOUT_NAME="zellij-login.kdl"
-ZELLIJ_LAYOUT_DIR="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}/layouts"
+ZELLIJ_CONFIG_DIR_PATH="${ZELLIJ_CONFIG_DIR:-$HOME/.config/zellij}"
+ZELLIJ_LAYOUT_DIR="$ZELLIJ_CONFIG_DIR_PATH/layouts"
+
+# Zellij global config we ship: mouse-first UX, Chrome/macOS Alt+letter
+# keybinds, no startup tips, frame-less panes. Full-replace of the user's
+# config.kdl; their prior content (if any) is preserved under
+# $CONFIG_BACKUP. Ownership is proved by two signals — a marker comment
+# on a line near the top AND a sha256 sidecar under $STATE_DIR.
+CONFIG_REL_PATH="zellij-login-config.kdl"
+CONFIG_NAME="config.kdl"
+CONFIG_TARGET="$ZELLIJ_CONFIG_DIR_PATH/$CONFIG_NAME"
+CONFIG_BACKUP="$CONFIG_TARGET.zellij-login.bak"
+CONFIG_MARKER="// managed-by: zellij-login"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/zellij-login"
+CONFIG_SHA_SIDECAR="$STATE_DIR/config.sha256"
 
 # Legacy-install constants so the new installer can migrate users who had
 # the previous zmx-backed version of this project installed.
@@ -75,6 +89,13 @@ done
 info() { printf 'zellij-login: %s\n' "$*"; }
 warn() { printf 'zellij-login: %s\n' "$*" >&2; }
 die()  { warn "$*"; exit 1; }
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 # Resolve a relative --prefix to an absolute path. The source line we later
 # append to $ZSHRC embeds $prefix verbatim; a relative value like `./foo`
@@ -232,6 +253,7 @@ src=""
 src_preview=""
 src_action=""
 src_layout=""
+src_config=""
 # Only probe for a local clone when $0 looks like a real install.sh file path.
 # Under `curl | sh` the shell sees $0="sh" and `dirname -- "$0"` resolves to
 # the user's CWD -- if that happens to contain an unrelated checkout of this
@@ -252,6 +274,7 @@ if [ -n "$script_dir" ] && [ -f "$script_dir/$HOOK_NAME" ]; then
   [ -f "$script_dir/$PREVIEW_NAME" ] && src_preview="$script_dir/$PREVIEW_NAME"
   [ -f "$script_dir/$ACTION_NAME" ] && src_action="$script_dir/$ACTION_NAME"
   [ -f "$script_dir/$LAYOUT_REL_PATH" ] && src_layout="$script_dir/$LAYOUT_REL_PATH"
+  [ -f "$script_dir/$CONFIG_REL_PATH" ] && src_config="$script_dir/$CONFIG_REL_PATH"
   info "installing from local clone ($script_dir)"
 else
   command -v curl >/dev/null 2>&1 || die "neither $HOOK_NAME found locally nor curl available"
@@ -279,6 +302,12 @@ else
       src_layout="$_tmpdir/$LAYOUT_NAME"
     else
       warn "layout download failed — proceeding without zellij-login layout"
+    fi
+    info "downloading $CONFIG_REL_PATH from $RAW_URL"
+    if curl -fsSL "$RAW_URL/$CONFIG_REL_PATH" -o "$_tmpdir/$CONFIG_REL_PATH"; then
+      src_config="$_tmpdir/$CONFIG_REL_PATH"
+    else
+      warn "config download failed — proceeding without config.kdl override"
     fi
   fi
 fi
@@ -314,6 +343,37 @@ if [ "$install_config" -eq 1 ] && [ -n "$src_layout" ]; then
   info "$layout_action layout at $ZELLIJ_LAYOUT_DIR/$LAYOUT_NAME"
 elif [ "$install_config" -eq 0 ]; then
   info "skipped zellij-login layout (--no-zellij-config)"
+fi
+
+# Install our curated config.kdl (mouse + Chrome/macOS keybinds + no
+# startup tips). Two-signal ownership (marker near top + sha sidecar),
+# byte-preserving backup, refuse-on-collision. If the user ever edits
+# our managed config, the uninstaller preserves their edits and puts
+# the original back as $CONFIG_TARGET.zellij-login.restored.
+if [ "$install_config" -eq 1 ] && [ -n "$src_config" ]; then
+  mkdir -p -- "$ZELLIJ_CONFIG_DIR_PATH"
+  is_ours=0
+  if [ -f "$CONFIG_TARGET" ] \
+      && sed -n '1,5p' "$CONFIG_TARGET" 2>/dev/null | grep -Fq "$CONFIG_MARKER"; then
+    is_ours=1
+  fi
+  if [ -f "$CONFIG_TARGET" ] && [ "$is_ours" -eq 0 ] && [ -f "$CONFIG_BACKUP" ]; then
+    warn "refusing to install: both $CONFIG_TARGET (user-owned)"
+    warn "and $CONFIG_BACKUP already exist."
+    die  "move or remove one and re-run."
+  fi
+  if [ -f "$CONFIG_TARGET" ] && [ "$is_ours" -eq 0 ]; then
+    mv -- "$CONFIG_TARGET" "$CONFIG_BACKUP"
+    info "backed up existing config.kdl to $CONFIG_BACKUP"
+  fi
+  config_action="installed"
+  [ "$is_ours" -eq 1 ] && config_action="updated"
+  cp -- "$src_config" "$CONFIG_TARGET"
+  info "$config_action $CONFIG_TARGET"
+  mkdir -p -- "$STATE_DIR"
+  sha256_file "$CONFIG_TARGET" > "$CONFIG_SHA_SIDECAR"
+elif [ "$install_config" -eq 0 ]; then
+  info "skipped config.kdl override (--no-zellij-config)"
 fi
 
 if [ "$wire" -eq 0 ]; then
