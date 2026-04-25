@@ -74,6 +74,17 @@ drop_cache() {
   rm -f -- "$cache/attached/$1" "$cache/cwds/$1" 2>/dev/null || true
 }
 
+# After kill / clean-dead, rewrite the hook's list-sessions snapshot so any
+# preview render fired by fzf's `reload()` sees the new state. Atomic via
+# temp-then-rename; concurrent writers can't corrupt the destination.
+refresh_list_cache() {
+  mkdir -p -- "$cache"
+  rlc_tmp="$cache/.sessions.tmp.$$"
+  zellij list-sessions -n 2>/dev/null > "$rlc_tmp" || true
+  mv -- "$rlc_tmp" "$cache/.sessions.txt" 2>/dev/null \
+    || rm -f -- "$rlc_tmp" 2>/dev/null
+}
+
 case "$action" in
   list)
     emit_sorted_list
@@ -92,6 +103,7 @@ case "$action" in
       *)        zellij kill-session -- "$name" >/dev/null 2>&1 || true ;;
     esac
     drop_cache "$name"
+    refresh_list_cache
     ;;
 
   clean-dead)
@@ -101,5 +113,6 @@ case "$action" in
           zellij delete-session --force -- "$n" >/dev/null 2>&1 || true
           drop_cache "$n"
         done
+    refresh_list_cache
     ;;
 esac

@@ -26,9 +26,21 @@ esac
 
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/zellij-login"
 
-# Pull this session's line out of `zellij list-sessions -n` (no formatting).
-status_line=$(zellij list-sessions -n 2>/dev/null \
-  | awk -v n="$name" '$1 == n { print; exit }')
+# Pull this session's line out of the hook's list-sessions snapshot.
+# Fall back to a live `zellij list-sessions -n` only if the snapshot is
+# missing (first install, sandboxed tests) or doesn't contain the name
+# (stale by one keystroke after an external session change). Snapshot read
+# avoids the per-keystroke zellij fork that scrolling the picker used to
+# trigger.
+list_cache="$cache/.sessions.txt"
+status_line=""
+if [ -r "$list_cache" ]; then
+  status_line=$(awk -v n="$name" '$1 == n { print; exit }' "$list_cache")
+fi
+if [ -z "$status_line" ]; then
+  status_line=$(zellij list-sessions -n 2>/dev/null \
+    | awk -v n="$name" '$1 == n { print; exit }')
+fi
 
 if [ -z "$status_line" ]; then
   printf 'session:  %s\n' "$name"
