@@ -26,6 +26,7 @@ cat > "$tmp/bin/zellij" <<'EOF'
 #!/bin/sh
 set -eu
 if [ "${1:-}" = "list-sessions" ]; then
+  [ -n "${MOCK_SESSIONS_SLEEP:-}" ] && sleep "$MOCK_SESSIONS_SLEEP"
   [ -f "${MOCK_SESSIONS:-/nonexistent}" ] && cat "$MOCK_SESSIONS" || true
   exit 0
 fi
@@ -50,6 +51,7 @@ out="${FZF_OUTPUTS_DIR:?}/$idx"
 # Esc (130) or no-match-Enter (1) exit status write it to FZF_RC_DIR/<idx>.
 rc_file="${FZF_RC_DIR:-/nonexistent}/$idx"
 [ -f "$rc_file" ] && exit "$(cat "$rc_file")"
+exit 0
 EOF
 chmod +x "$tmp/bin/fzf"
 
@@ -92,6 +94,32 @@ reset() {
 run_hook() {
   printf '%s' "$1" | zsh -i -c ". \"$ROOT/zellij-ssh-login.zsh\"" \
     >/dev/null 2>&1 || true
+}
+
+run_hook_err_return() {
+  printf '%s' "$1" | zsh -i -c "setopt err_return; . \"$ROOT/zellij-ssh-login.zsh\"" \
+    >/dev/null 2>&1 || true
+}
+
+run_hook_with_deadline() {
+  printf '%s' "$1" > "$tmp/hook.stdin"
+  zsh -i -c ". \"$ROOT/zellij-ssh-login.zsh\"" \
+    < "$tmp/hook.stdin" >/dev/null 2>&1 &
+  hook_pid=$!
+  hook_ticks=0
+
+  while kill -0 "$hook_pid" 2>/dev/null; do
+    if [ "$hook_ticks" -ge "$2" ]; then
+      kill "$hook_pid" 2>/dev/null || true
+      wait "$hook_pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 0.1
+    hook_ticks=$((hook_ticks + 1))
+  done
+
+  wait "$hook_pid" 2>/dev/null || true
+  return 0
 }
 
 # NOTE on fzf output shape: the session picker runs with --print-query, so
@@ -165,19 +193,47 @@ say "in-zellij: ok"
 
 # --- 7. type-to-create: query matches no session, becomes the new name ---
 # The session-picker fzf emits `typedname\n` (query only, no selection) to
-# simulate "user typed a name that matches nothing, pressed Enter". Hook
-# should skip the `read -r name` prompt and use the query as $name. The
-# dir picker (2nd fzf call) returns $HOME as before.
+# simulate "user typed a name that matches nothing, pressed Enter". Real fzf
+# exits 1 on this path, so the hook must intentionally handle that rc. The dir
+# picker (2nd fzf call) returns $HOME as before.
 reset
 : > "$tmp/sessions"
 printf '%s\n' 'typedname' > "$FZF_OUTPUTS_DIR/1"
+printf '1' > "$FZF_RC_DIR/1"
 printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
 run_hook ''
 grep -Fxq 'zellij --layout zellij-login attach -c -- typedname' "$RUN_LOG" \
   || fail "type-to-create: expected 'zellij --layout zellij-login attach -c -- typedname'"
 say "type-to-create: ok"
 
-# --- 8. dir-depth-cap: new-session dir picker stops at depth 1 ---
+# --- 8. type-to-create survives ERR_RETURN ---
+reset
+: > "$tmp/sessions"
+printf '%s\n' 'errreturn-name' > "$FZF_OUTPUTS_DIR/1"
+printf '1' > "$FZF_RC_DIR/1"
+printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
+run_hook_err_return ''
+grep -Fxq 'zellij --layout zellij-login attach -c -- errreturn-name' "$RUN_LOG" \
+  || fail "err-return: fzf rc=1 should not abort type-to-create"
+say "err-return: ok"
+
+# --- 9. slow session listing must not block type-to-create ---
+reset
+: > "$tmp/sessions"
+MOCK_SESSIONS_SLEEP=5; export MOCK_SESSIONS_SLEEP
+printf '%s\n' 'slowname' > "$FZF_OUTPUTS_DIR/1"
+printf '1' > "$FZF_RC_DIR/1"
+printf '\n%s\n' "$HOME" > "$FZF_OUTPUTS_DIR/2"
+run_hook_with_deadline '' 30 \
+  || { unset MOCK_SESSIONS_SLEEP; fail "slow-list: hook should not wait on zellij list-sessions"; }
+unset MOCK_SESSIONS_SLEEP
+grep -Fxq '[+ new session ]' "$FZF_STDIN_DIR/1" \
+  || fail "slow-list: session picker should still receive the new-session sentinel"
+grep -Fxq 'zellij --layout zellij-login attach -c -- slowname' "$RUN_LOG" \
+  || fail "slow-list: expected type-to-create to reach zellij attach"
+say "slow-list: ok"
+
+# --- 10. dir-depth-cap: new-session dir picker stops at depth 1 ---
 # Seed a root with a depth-2+ tree and assert that only depth-0 + depth-1
 # dirs reach the fzf stdin. Prevents regression to the old maxdepth-5 list
 # that drowned top-level projects under fuzzy-ranked sub-sub-paths.
@@ -201,7 +257,7 @@ grep -Fxq "$HOME/proj-b" "$FZF_STDIN_DIR/2" \
 rm -rf -- "$HOME/proj-a" "$HOME/proj-b"
 say "dir-depth-cap: ok"
 
-# --- 9. esc-with-query: typed query + Esc must cancel, not create ---
+# --- 11. esc-with-query: typed query + Esc must cancel, not create ---
 # With --print-query, fzf prints the query to stdout on Esc (exit 130) too.
 # Without the rc check, the hook treats this identically to "Enter with no
 # match" and spawns an unintended session named after the typed query.

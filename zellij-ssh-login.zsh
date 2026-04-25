@@ -56,9 +56,38 @@ _zellij_login_hook() {
   # parse `zellij list-sessions -n` (no-formatting form) because it contains
   # the EXITED marker; --short does not. The icon prefix is stripped by the
   # caller before the name goes back to zellij.
+  # Keep the producer finite: fzf waits for EOF before accepting no-match Enter.
+  _zl_list_sessions() {
+    local tmp pid ticks max_ticks
+    tmp="${TMPDIR:-/tmp}/zellij-login-sessions.$$.$RANDOM"
+    : >| "$tmp" || return 0
+
+    zellij list-sessions -n >| "$tmp" 2>/dev/null &
+    pid=$!
+    ticks=0
+    max_ticks=20
+
+    while kill -0 "$pid" 2>/dev/null; do
+      if (( ticks >= max_ticks )); then
+        kill "$pid" 2>/dev/null || true
+        sleep 0.05
+        kill -9 "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        rm -f -- "$tmp"
+        return 0
+      fi
+      sleep 0.05
+      (( ticks += 1 ))
+    done
+
+    wait "$pid" 2>/dev/null || true
+    [[ -r $tmp ]] && cat "$tmp"
+    rm -f -- "$tmp"
+  }
+
   _zl_sorted_sessions() {
     local line name ts icon
-    zellij list-sessions -n 2>/dev/null | while IFS= read -r line; do
+    _zl_list_sessions | while IFS= read -r line; do
       [[ -z $line ]] && continue
       name=${line%% *}
       [[ -z $name ]] && continue
@@ -162,19 +191,23 @@ _zellij_login_hook() {
   # and dispatch straight to the dir picker — saving the user a redundant
   # "new session name:" prompt for a name they already typed.
   local raw fzf_rc
-  raw=$(
+  if raw=$(
     { print -- "$SKIP_SESSION"; _zl_sorted_sessions; print -- "$NEW_SESSION"; } \
     | fzf --height=60% --reverse --prompt="zellij session > " --no-multi \
         --print-query \
         --header-first --header="$_zl_header" \
         "${_zl_preview_args[@]}" "${_zl_binds[@]}"
-  )
-  fzf_rc=$?
+  ); then
+    fzf_rc=0
+  else
+    fzf_rc=$?
+  fi
   # fzf rc: 0 = selection, 1 = no-match + Enter (type-to-create),
   # 130 = Esc / Ctrl-C. --print-query emits the query on stdout regardless,
   # so without this rc check, Esc-after-typing would fall into the
   # type-to-create branch below and spawn an unintended session.
   (( fzf_rc == 130 )) && return 0
+  (( fzf_rc == 0 || fzf_rc == 1 )) || return 0
 
   local -a picker_out=("${(@f)raw}")
   local query=${picker_out[1]:-} choice=${picker_out[2]:-}
