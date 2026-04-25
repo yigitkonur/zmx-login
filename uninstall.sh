@@ -47,6 +47,13 @@ EOF
 done
 
 info() { printf 'zellij-login: %s\n' "$*"; }
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 if [ -f "$prefix/$HOOK_NAME" ]; then
   rm -f -- "$prefix/$HOOK_NAME"
@@ -78,9 +85,7 @@ if [ -f "$CONFIG_TARGET" ] \
     && sed -n '1,5p' "$CONFIG_TARGET" 2>/dev/null | grep -Fq "$CONFIG_MARKER"; then
   sha_now=""
   sha_recorded=""
-  if command -v shasum >/dev/null 2>&1; then
-    sha_now="$(shasum -a 256 "$CONFIG_TARGET" 2>/dev/null | awk '{print $1}')"
-  fi
+  sha_now="$(sha256_file "$CONFIG_TARGET" 2>/dev/null)"
   [ -f "$CONFIG_SHA_SIDECAR" ] && sha_recorded="$(cat "$CONFIG_SHA_SIDECAR" 2>/dev/null)"
   if [ -n "$sha_now" ] && [ -n "$sha_recorded" ] && [ "$sha_now" = "$sha_recorded" ]; then
     rm -f -- "$CONFIG_TARGET"
@@ -96,9 +101,12 @@ if [ -f "$CONFIG_TARGET" ] \
       info "original config preserved at $CONFIG_RESTORED_ALONGSIDE"
     fi
   fi
-  [ -f "$CONFIG_SHA_SIDECAR" ] && rm -f -- "$CONFIG_SHA_SIDECAR"
-  rmdir "$STATE_DIR" 2>/dev/null || true
 fi
+# Always clean up the sidecar and state dir — they're ours regardless of
+# whether the managed config.kdl was present with our marker (user may have
+# deleted config.kdl or stripped the marker to take ownership).
+[ -f "$CONFIG_SHA_SIDECAR" ] && rm -f -- "$CONFIG_SHA_SIDECAR"
+rmdir "$STATE_DIR" 2>/dev/null || true
 
 # Cache dir is wholly ours (MRU dirs, attached timestamps, session cwds).
 if [ -d "$CACHE_DIR" ]; then

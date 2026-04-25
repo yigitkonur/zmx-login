@@ -89,6 +89,13 @@ done
 info() { printf 'zellij-login: %s\n' "$*"; }
 warn() { printf 'zellij-login: %s\n' "$*" >&2; }
 die()  { warn "$*"; exit 1; }
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 # Resolve a relative --prefix to an absolute path. The source line we later
 # append to $ZSHRC embeds $prefix verbatim; a relative value like `./foo`
@@ -364,7 +371,7 @@ if [ "$install_config" -eq 1 ] && [ -n "$src_config" ]; then
   cp -- "$src_config" "$CONFIG_TARGET"
   info "$config_action $CONFIG_TARGET"
   mkdir -p -- "$STATE_DIR"
-  shasum -a 256 "$CONFIG_TARGET" | awk '{print $1}' > "$CONFIG_SHA_SIDECAR"
+  sha256_file "$CONFIG_TARGET" > "$CONFIG_SHA_SIDECAR"
 elif [ "$install_config" -eq 0 ]; then
   info "skipped config.kdl override (--no-zellij-config)"
 fi

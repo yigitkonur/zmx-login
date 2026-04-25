@@ -50,6 +50,7 @@ keybinds clear-defaults=true {
 
         bind "Alt d" { Detach; }
 
+        bind "Ctrl o" { LaunchOrFocusPlugin "zellij:session-manager" { floating true; }; }
         bind "Ctrl g" { SwitchToMode "Locked"; }
     }
 

@@ -11,6 +11,13 @@ trap 'rm -rf -- "$tmp_home"' EXIT
 
 say() { printf '[test] %s\n' "$*"; }
 fail() { printf '[test] FAIL: %s\n' "$*" >&2; exit 1; }
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 # Seed a pre-existing .zshrc with content we must preserve.
 cat > "$tmp_home/.zshrc" <<'EOF'
@@ -199,7 +206,7 @@ sh "$ROOT/install.sh" --no-install-deps >/dev/null
 sed -n '1,5p' "$CONFIG_TARGET" | grep -Fq '// managed-by: zellij-login' \
   || fail "marker not in first 5 lines of installed config.kdl"
 [ -f "$CONFIG_SIDECAR" ] || fail "sha sidecar not recorded"
-[ "$(cat "$CONFIG_SIDECAR")" = "$(shasum -a 256 "$CONFIG_TARGET" | awk '{print $1}')" ] \
+[ "$(cat "$CONFIG_SIDECAR")" = "$(sha256_file "$CONFIG_TARGET")" ] \
   || fail "sidecar sha does not match config.kdl content"
 [ ! -f "$CONFIG_BACKUP" ] || fail "fresh install created an unexpected .bak"
 say "config-fresh-install: ok"
@@ -228,7 +235,7 @@ cmp -s "$CONFIG_TARGET" "$ROOT/zellij-login-config.kdl" \
 bak_mtime_after="$(stat -f %m "$CONFIG_BACKUP" 2>/dev/null || stat -c %Y "$CONFIG_BACKUP")"
 [ "$bak_mtime_before" = "$bak_mtime_after" ] \
   || fail ".bak was rewritten on reinstall (double-backup)"
-[ "$(cat "$CONFIG_SIDECAR")" = "$(shasum -a 256 "$CONFIG_TARGET" | awk '{print $1}')" ] \
+[ "$(cat "$CONFIG_SIDECAR")" = "$(sha256_file "$CONFIG_TARGET")" ] \
   || fail "sidecar not updated after reinstall"
 say "config-reinstall-idempotent: ok"
 
